@@ -1,0 +1,37 @@
+[project]
+name = "tenet-folio"
+version = "0.1.0"
+description = "Personal portfolio manager backend"
+license = {text = "MIT"}
+requires-python = ">=3.13"
+authors = [{name = "Bob Wilkinson"}]
+keywords = ["portfolio", "finance", "investment", "tracking"]
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "sqlalchemy>=2.0.25",
+    "alembic>=1.13.1",
+    "sqlcipher3>=0.5.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "keyring>=25.0.0",
+    "snaptrade-python-sdk>=11.0.0",
+    "simplefin>=0.2.0",
+    "ibflex>=0.15",
+    "coinbase-advanced-py>=1.0.0",
+    "schwab-py>=1.5.0",
+    "yfinance>=0.2.36",
+]
+
+[project.urls]
+Homepage = "https://github.com/bobwilkinson20/tenet-folio"
+Repository = "https://github.com/bobwilkinson20/tenet-folio"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.26.0",
+    "ruff>=0.1.0",
+]

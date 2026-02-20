@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+ENV/
+env/
+.env*
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Database
+*.db
+*.sqlite3
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node/Frontend
+node_modules/
+.npm
+.pnpm-store/
+dist/
+.cache/
+
+# Vite
+*.local
+
+# Build outputs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Coinbase CDP API key files
+cdp_api_key*.json
+
+# Charles Schwab OAuth token file
+.schwab_token.json

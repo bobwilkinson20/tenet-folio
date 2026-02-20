@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/* ── Design Tokens ── */
+:root {
+  /* Background */
+  --bg-primary: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
+  --bg-overlay: #020617;
+
+  /* Text */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-muted: #475569;
+
+  /* Border */
+  --border-subtle: rgba(148, 163, 184, 0.06);
+  --border-default: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.2);
+
+  /* Accent: Emerald */
+  --accent-primary: #10b981;
+  --accent-hover: #34d399;
+  --accent-muted: rgba(16, 185, 129, 0.08);
+  --accent-border: rgba(16, 185, 129, 0.15);
+  --accent-on-light: #059669;
+
+  /* Semantic */
+  --positive: #10b981;
+  --negative: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --neutral: #64748b;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-16: 64px;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+}
+
+/* ── Tailwind theme extensions (tf-* prefix) ── */
+@theme {
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code",
+    monospace;
+
+  --color-tf-bg-primary: #0f172a;
+  --color-tf-bg-surface: #1e293b;
+  --color-tf-bg-elevated: #334155;
+  --color-tf-bg-overlay: #020617;
+
+  --color-tf-text-primary: #f1f5f9;
+  --color-tf-text-secondary: #94a3b8;
+  --color-tf-text-tertiary: #64748b;
+  --color-tf-text-muted: #475569;
+
+  --color-tf-border-subtle: rgba(148, 163, 184, 0.06);
+  --color-tf-border-default: rgba(148, 163, 184, 0.12);
+  --color-tf-border-strong: rgba(148, 163, 184, 0.2);
+
+  --color-tf-accent-primary: #10b981;
+  --color-tf-accent-hover: #34d399;
+  --color-tf-accent-muted: rgba(16, 185, 129, 0.08);
+  --color-tf-accent-border: rgba(16, 185, 129, 0.15);
+
+  --color-tf-positive: #10b981;
+  --color-tf-negative: #ef4444;
+  --color-tf-warning: #f59e0b;
+  --color-tf-info: #3b82f6;
+  --color-tf-neutral: #64748b;
+
+  /* Border radius overrides to match style guide */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+}
+
+/* ── Base Styles ── */
+html {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code",
+    monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

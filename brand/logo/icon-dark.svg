@@ -1,0 +1,25 @@
+<svg width="64" height="80" viewBox="0 0 64 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Inactive grid dots -->
+  <g opacity="0.3">
+    <circle cx="8" cy="8" r="2.5" fill="#334155"/><circle cx="24" cy="8" r="2.5" fill="#334155"/><circle cx="40" cy="8" r="2.5" fill="#334155"/><circle cx="56" cy="8" r="2.5" fill="#334155"/>
+    <circle cx="8" cy="24" r="2.5" fill="#334155"/><circle cx="24" cy="24" r="2.5" fill="#334155"/><circle cx="40" cy="24" r="2.5" fill="#334155"/><circle cx="56" cy="24" r="2.5" fill="#334155"/>
+    <circle cx="8" cy="40" r="2.5" fill="#334155"/><circle cx="24" cy="40" r="2.5" fill="#334155"/><circle cx="40" cy="40" r="2.5" fill="#334155"/><circle cx="56" cy="40" r="2.5" fill="#334155"/>
+    <circle cx="8" cy="56" r="2.5" fill="#334155"/><circle cx="24" cy="56" r="2.5" fill="#334155"/><circle cx="40" cy="56" r="2.5" fill="#334155"/><circle cx="56" cy="56" r="2.5" fill="#334155"/>
+    <circle cx="8" cy="72" r="2.5" fill="#334155"/><circle cx="24" cy="72" r="2.5" fill="#334155"/><circle cx="40" cy="72" r="2.5" fill="#334155"/><circle cx="56" cy="72" r="2.5" fill="#334155"/>
+  </g>
+  <!-- Connection lines -->
+  <line x1="8" y1="8" x2="56" y2="8" stroke="#f1f5f9" stroke-width="1.2" opacity="0.15"/>
+  <line x1="8" y1="8" x2="8" y2="72" stroke="#94a3b8" stroke-width="1.2" opacity="0.12"/>
+  <line x1="8" y1="40" x2="40" y2="40" stroke="#10b981" stroke-width="1.2" opacity="0.2"/>
+  <!-- Active nodes — F shape -->
+  <circle cx="8" cy="8" r="4.5" fill="#f1f5f9"/>
+  <circle cx="24" cy="8" r="4.5" fill="#e2e8f0"/>
+  <circle cx="40" cy="8" r="4.5" fill="#cbd5e1"/>
+  <circle cx="56" cy="8" r="4.5" fill="#94a3b8"/>
+  <circle cx="8" cy="24" r="4" fill="#94a3b8"/>
+  <circle cx="8" cy="40" r="5" fill="#10b981"/>
+  <circle cx="24" cy="40" r="4.5" fill="#34d399"/>
+  <circle cx="40" cy="40" r="4" fill="#6ee7b7" opacity="0.7"/>
+  <circle cx="8" cy="56" r="4" fill="#64748b"/>
+  <circle cx="8" cy="72" r="4.5" fill="#94a3b8"/>
+</svg>

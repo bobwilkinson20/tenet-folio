@@ -1,0 +1,19 @@
+<svg width="64" height="80" viewBox="0 0 64 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g opacity="0.2">
+    <circle cx="8" cy="8" r="2.5" fill="#fff"/><circle cx="24" cy="8" r="2.5" fill="#fff"/><circle cx="40" cy="8" r="2.5" fill="#fff"/><circle cx="56" cy="8" r="2.5" fill="#fff"/>
+    <circle cx="8" cy="24" r="2.5" fill="#fff"/><circle cx="24" cy="24" r="2.5" fill="#fff"/><circle cx="40" cy="24" r="2.5" fill="#fff"/><circle cx="56" cy="24" r="2.5" fill="#fff"/>
+    <circle cx="8" cy="40" r="2.5" fill="#fff"/><circle cx="24" cy="40" r="2.5" fill="#fff"/><circle cx="40" cy="40" r="2.5" fill="#fff"/><circle cx="56" cy="40" r="2.5" fill="#fff"/>
+    <circle cx="8" cy="56" r="2.5" fill="#fff"/><circle cx="24" cy="56" r="2.5" fill="#fff"/><circle cx="40" cy="56" r="2.5" fill="#fff"/><circle cx="56" cy="56" r="2.5" fill="#fff"/>
+    <circle cx="8" cy="72" r="2.5" fill="#fff"/><circle cx="24" cy="72" r="2.5" fill="#fff"/><circle cx="40" cy="72" r="2.5" fill="#fff"/><circle cx="56" cy="72" r="2.5" fill="#fff"/>
+  </g>
+  <circle cx="8" cy="8" r="4.5" fill="#ffffff"/>
+  <circle cx="24" cy="8" r="4.5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="40" cy="8" r="4.5" fill="#ffffff" opacity="0.7"/>
+  <circle cx="56" cy="8" r="4.5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="8" cy="24" r="4" fill="#ffffff" opacity="0.5"/>
+  <circle cx="8" cy="40" r="5" fill="#ffffff"/>
+  <circle cx="24" cy="40" r="4.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="40" cy="40" r="4" fill="#ffffff" opacity="0.5"/>
+  <circle cx="8" cy="56" r="4" fill="#ffffff" opacity="0.4"/>
+  <circle cx="8" cy="72" r="4.5" fill="#ffffff" opacity="0.5"/>
+</svg>
