@@ -7,15 +7,17 @@ export function PlaidItemList() {
   const [items, setItems] = useState<PlaidItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
+      setFetchError(false);
       const response = await plaidApi.listItems();
       setItems(response.data);
     } catch {
-      // Silently fail — the provider list already shows config status
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
@@ -51,7 +53,11 @@ export function PlaidItemList() {
         <p className="text-xs text-tf-negative">{removeError}</p>
       )}
 
-      {loading && items.length === 0 ? (
+      {fetchError ? (
+        <p className="text-xs text-tf-negative">
+          Failed to load linked institutions.
+        </p>
+      ) : loading && items.length === 0 ? (
         <p className="text-xs text-tf-text-tertiary">Loading...</p>
       ) : items.length === 0 ? (
         <p className="text-xs text-tf-text-tertiary">
