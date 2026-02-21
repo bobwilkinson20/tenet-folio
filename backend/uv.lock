@@ -975,6 +975,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/17/0d/74f0293dfd7dcc3837746d0138cbedd60b31701ecc75caec7d3f281feba0/multitasking-0.0.12.tar.gz", hash = "sha256:2fba2fa8ed8c4b85e227c5dd7dc41c7d658de3b6f247927316175a57349b84d1", size = 19984, upload-time = "2025-07-20T21:27:51.636Z" }
 
 [[package]]
+name = "nulltype"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/ce/92289851364b7f816a839c8064aac06c01f3a3ecf33ab04adf9d0a0ab66a/nulltype-2.3.1.zip", hash = "sha256:64aa3cb2ab5e904d1b37175b9b922bea268c13f9ce32e3d373313150ab5ef272", size = 20119, upload-time = "2018-06-03T22:01:01.45Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/0f/47dde1a3cceac9858da0bfb92d2279bf5f993ed075b72983e92efc297db3/nulltype-2.3.1-py2.py3-none-any.whl", hash = "sha256:16ae565745118e37e0558441f5821c76351d8c3a789640b5bca277cf65b2271b", size = 11054, upload-time = "2018-06-03T22:01:04.03Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1085,6 +1094,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/88/b0/79462b42e89764998
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/41/19c65578ef9a54b3083253c68a607f099642747168fe00f3a2bceb7c3a34/peewee-3.19.0-py3-none-any.whl", hash = "sha256:de220b94766e6008c466e00ce4ba5299b9a832117d9eb36d45d0062f3cfd7417", size = 411885, upload-time = "2026-01-07T17:24:58.33Z" },
 ]
+
+[[package]]
+name = "plaid-python"
+version = "38.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nulltype" },
+    { name = "python-dateutil" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/30/8245993e457040004b5e670b302e2bbd7c20255168f5a530c6ea8206cae5/plaid_python-38.3.0.tar.gz", hash = "sha256:74da09d73652775201e0333653c7a09678cad1ced9877bed5106ff1057a05840", size = 1173133, upload-time = "2026-02-19T00:44:30.737Z" }
 
 [[package]]
 name = "platformdirs"
@@ -1674,6 +1694,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "ibflex" },
     { name = "keyring" },
+    { name = "plaid-python" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -1701,6 +1722,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "ibflex", specifier = ">=0.15" },
     { name = "keyring", specifier = ">=25.0.0" },
+    { name = "plaid-python", specifier = ">=38.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },

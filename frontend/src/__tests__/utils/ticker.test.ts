@@ -17,6 +17,11 @@ describe("ticker utilities", () => {
       expect(isSyntheticTicker("_MAN:123456789012")).toBe(true);
     });
 
+    it("returns true for _PLAID: prefixed tickers", () => {
+      expect(isSyntheticTicker("_PLAID:abc12345")).toBe(true);
+      expect(isSyntheticTicker("_PLAID:12345678")).toBe(true);
+    });
+
     it("returns false for regular tickers", () => {
       expect(isSyntheticTicker("AAPL")).toBe(false);
       expect(isSyntheticTicker("VTI")).toBe(false);

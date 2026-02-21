@@ -21,6 +21,7 @@ PROVIDER_DEFINITIONS: list[tuple[str, str, str]] = [
     ("IBKR", "integrations.ibkr_flex_client", "IBKRFlexClient"),
     ("Coinbase", "integrations.coinbase_client", "CoinbaseClient"),
     ("Schwab", "integrations.schwab_client", "SchwabClient"),
+    ("Plaid", "integrations.plaid_client", "PlaidClient"),
 ]
 
 ALL_PROVIDER_NAMES: list[str] = [name for name, _, _ in PROVIDER_DEFINITIONS]

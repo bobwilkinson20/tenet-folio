@@ -8,18 +8,19 @@ class TestListProviders:
     """Tests for GET /api/providers."""
 
     def test_returns_all_providers(self, client):
-        """Returns all 5 known providers."""
+        """Returns all 6 known providers."""
         response = client.get("/api/providers")
         assert response.status_code == 200
 
         data = response.json()
-        assert len(data) == 5
+        assert len(data) == 6
         names = [p["name"] for p in data]
         assert "SnapTrade" in names
         assert "SimpleFIN" in names
         assert "IBKR" in names
         assert "Coinbase" in names
         assert "Schwab" in names
+        assert "Plaid" in names
 
     def test_default_enabled(self, client):
         """All providers are enabled by default."""

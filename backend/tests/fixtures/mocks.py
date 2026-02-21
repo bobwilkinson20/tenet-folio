@@ -955,6 +955,155 @@ SAMPLE_SCHWAB_HOLDINGS = [
     ),
 ]
 
+class MockPlaidClient:
+    """Mock Plaid client for testing.
+
+    Implements the ProviderClient protocol. Accepts ProviderAccount,
+    ProviderHolding, and ProviderActivity lists directly (Plaid data
+    is already normalized by the real client).
+    """
+
+    def __init__(
+        self,
+        accounts: list[ProviderAccount] | None = None,
+        holdings: list[ProviderHolding] | None = None,
+        activities: list[ProviderActivity] | None = None,
+        balance_dates: dict[str, datetime | None] | None = None,
+        should_fail: bool = False,
+        failure_type: str = "generic",
+        errors: list[str | ProviderSyncError] | None = None,
+        link_token: str = "link-sandbox-test-token",
+        exchange_result: dict | None = None,
+    ):
+        self._accounts = accounts or []
+        self._holdings = holdings or []
+        self._activities = activities or []
+        self._balance_dates = balance_dates or {}
+        self._should_fail = should_fail
+        self._failure_type = failure_type
+        self._errors = _coerce_errors(errors)
+        self._link_token = link_token
+        self._exchange_result = exchange_result or {
+            "access_token": "access-sandbox-test",
+            "item_id": "item-sandbox-test",
+        }
+
+    @property
+    def provider_name(self) -> str:
+        """Return the provider name."""
+        return "Plaid"
+
+    def is_configured(self) -> bool:
+        """Mock is always configured unless set to fail."""
+        return not self._should_fail
+
+    def _raise_failure(self) -> None:
+        """Raise the appropriate exception based on failure_type."""
+        if self._failure_type == "auth":
+            raise ProviderAuthError("Mock Plaid error", provider_name="Plaid")
+        elif self._failure_type == "connection":
+            raise ProviderConnectionError("Mock Plaid error", provider_name="Plaid")
+        else:
+            raise Exception("Mock Plaid error")
+
+    def create_link_token(self) -> str:
+        """Return mock link token."""
+        if self._should_fail:
+            self._raise_failure()
+        return self._link_token
+
+    def exchange_public_token(self, public_token: str) -> dict:
+        """Return mock exchange result."""
+        if self._should_fail:
+            self._raise_failure()
+        return dict(self._exchange_result)
+
+    def remove_item(self, access_token: str) -> None:
+        """Mock item removal (no-op)."""
+        if self._should_fail:
+            self._raise_failure()
+
+    def get_accounts(self) -> list[ProviderAccount]:
+        """Return mock accounts."""
+        if self._should_fail:
+            self._raise_failure()
+        return list(self._accounts)
+
+    def get_holdings(self, account_id: str | None = None) -> list[ProviderHolding]:
+        """Return mock holdings, optionally filtered by account."""
+        if self._should_fail:
+            self._raise_failure()
+        if account_id:
+            return [h for h in self._holdings if h.account_id == account_id]
+        return list(self._holdings)
+
+    def sync_all(self) -> ProviderSyncResult:
+        """Return mock sync result."""
+        if self._should_fail:
+            self._raise_failure()
+        return ProviderSyncResult(
+            holdings=list(self._holdings),
+            accounts=list(self._accounts),
+            errors=list(self._errors),
+            balance_dates=dict(self._balance_dates),
+            activities=list(self._activities),
+        )
+
+
+# Sample Plaid test data
+SAMPLE_PLAID_ACCOUNTS = [
+    ProviderAccount(
+        id="plaid_acc_001",
+        name="Plaid Checking",
+        institution="Chase",
+        account_number="1234",
+    ),
+    ProviderAccount(
+        id="plaid_acc_002",
+        name="Plaid Investment",
+        institution="Vanguard",
+        account_number="5678",
+    ),
+]
+
+SAMPLE_PLAID_HOLDINGS = [
+    ProviderHolding(
+        account_id="plaid_acc_002",
+        symbol="VTI",
+        quantity=Decimal("100"),
+        price=Decimal("220.00"),
+        market_value=Decimal("22000.00"),
+        currency="USD",
+        name="Vanguard Total Stock Market ETF",
+    ),
+    ProviderHolding(
+        account_id="plaid_acc_002",
+        symbol="_CASH:USD",
+        quantity=Decimal("3000.00"),
+        price=Decimal("1"),
+        market_value=Decimal("3000.00"),
+        currency="USD",
+        name="USD Cash",
+    ),
+]
+
+SAMPLE_PLAID_ACTIVITIES = [
+    ProviderActivity(
+        account_id="plaid_acc_002",
+        external_id="plaid_txn_001",
+        activity_date=datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+        type="buy",
+        amount=Decimal("-22000.00"),
+        description="Buy 100 VTI",
+        ticker="VTI",
+        units=Decimal("100"),
+        price=Decimal("220.00"),
+        currency="USD",
+        fee=None,
+    ),
+]
+
+
 class MockMarketDataProvider:
     """Mock market data provider for testing.
 

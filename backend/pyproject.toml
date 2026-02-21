@@ -21,6 +21,7 @@ dependencies = [
     "ibflex>=0.15",
     "coinbase-advanced-py>=1.0.0",
     "schwab-py>=1.5.0",
+    "plaid-python>=38.0.0",
     "yfinance>=0.2.36",
 ]
 

@@ -42,6 +42,7 @@ PROVIDER_NAMES = {
     "ibkr": "IBKR",
     "coinbase": "Coinbase",
     "schwab": "Schwab",
+    "plaid": "Plaid",
 }
 
 
@@ -83,6 +84,10 @@ def get_provider_client(name: str):
         from integrations.schwab_client import SchwabClient
 
         client = SchwabClient()
+    elif canonical == "Plaid":
+        from integrations.plaid_client import PlaidClient
+
+        client = PlaidClient()
     else:
         raise ValueError(f"Unhandled provider: {canonical}")
 
@@ -394,7 +399,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--provider",
         required=True,
-        help="Provider name: SnapTrade, SimpleFIN, IBKR, Coinbase, Schwab",
+        help="Provider name: SnapTrade, SimpleFIN, IBKR, Coinbase, Schwab, Plaid",
     )
     parser.add_argument(
         "--verbose",

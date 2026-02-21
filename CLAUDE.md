@@ -11,7 +11,7 @@ Personal portfolio manager that syncs brokerage accounts via multiple data aggre
 - **Backend:** FastAPI (Python 3.13) on `localhost:8000`
 - **Frontend:** React + TypeScript + Vite on `localhost:5173`
 - **Database:** SQLite with SQLAlchemy ORM + Alembic migrations
-- **Data Providers:** SnapTrade, SimpleFIN, Interactive Brokers, Coinbase, and Charles Schwab (any combination, credentials in `.env`)
+- **Data Providers:** SnapTrade, SimpleFIN, Interactive Brokers, Coinbase, Charles Schwab, and Plaid (any combination, credentials in `.env`)
 
 ## Key Design Decisions
 
@@ -122,9 +122,11 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 | SimpleFIN client | `backend/integrations/simplefin_client.py` |
 | IBKR Flex client | `backend/integrations/ibkr_flex_client.py` |
 | Schwab client | `backend/integrations/schwab_client.py` |
+| Plaid client | `backend/integrations/plaid_client.py` |
 | IBKR setup script | `backend/scripts/setup_ibkr.py` |
 | Coinbase setup script | `backend/scripts/setup_coinbase.py` |
 | Schwab setup script | `backend/scripts/setup_schwab.py` |
+| Plaid setup script | `backend/scripts/setup_plaid.py` |
 | Schwab token refresh | `backend/scripts/refresh_schwab_token.py` |
 | Schwab debug script | `backend/scripts/debug_schwab.py` |
 | Credential manager | `backend/services/credential_manager.py` |
@@ -139,7 +141,7 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 
 - Backend uses pytest with in-memory SQLite fixture (`tests/conftest.py`)
 - Frontend uses Vitest with React Testing Library
-- Mock provider clients (`MockSnapTradeClient`, `MockSimpleFINClient`, `MockProviderRegistry`) for unit/integration tests
+- Mock provider clients (`MockSnapTradeClient`, `MockSimpleFINClient`, `MockPlaidClient`, `MockProviderRegistry`) for unit/integration tests
 
 ### SnapTrade Integration Tests
 
@@ -248,6 +250,24 @@ uv run python scripts/setup_schwab.py
 cd backend
 uv run python scripts/refresh_schwab_token.py
 ```
+
+### Plaid Setup
+
+To configure Plaid:
+
+```bash
+cd backend
+uv run python scripts/setup_plaid.py
+# Follow prompts to validate client_id and secret
+# Add PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENVIRONMENT to your .env file
+```
+
+**Prerequisites:**
+1. Sign up at https://dashboard.plaid.com/
+2. Go to Developers > Keys and copy your client_id and secret
+3. Use `sandbox` environment for testing, `production` for real accounts
+
+**Institution linking:** Unlike other providers, Plaid uses browser-based authentication via Plaid Link. After configuring credentials, go to Settings > Providers in the web UI to link institutions.
 
 ## Data Backfill Scripts
 
