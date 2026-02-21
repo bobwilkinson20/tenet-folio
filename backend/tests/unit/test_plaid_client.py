@@ -664,3 +664,14 @@ class TestLinkFlow:
 
         assert result["access_token"] == "access-sandbox-xyz"
         assert result["item_id"] == "item-sandbox-xyz"
+
+    def test_remove_item(self, mock_settings, mock_plaid_api):
+        mock_plaid_api.item_remove.return_value = {"status_code": 200}
+
+        with patch("integrations.plaid_client.ApiClient"):
+            client = PlaidClient()
+        client.remove_item("access-sandbox-xyz")
+
+        mock_plaid_api.item_remove.assert_called_once()
+        call_args = mock_plaid_api.item_remove.call_args[0][0]
+        assert call_args.access_token == "access-sandbox-xyz"

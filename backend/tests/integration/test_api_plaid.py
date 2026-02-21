@@ -141,7 +141,7 @@ class TestListItems:
 
 
 class TestRemoveItem:
-    def test_removes_item(self, plaid_client, db):
+    def test_removes_item(self, plaid_client, db, mock_plaid_client):
         db.add(PlaidItem(
             item_id="item-to-delete",
             access_token="access-delete",
@@ -153,9 +153,44 @@ class TestRemoveItem:
         assert response.status_code == 200
         assert response.json()["item_id"] == "item-to-delete"
 
-        # Verify deleted
+        # Verify deleted from DB
         item = db.query(PlaidItem).filter(PlaidItem.item_id == "item-to-delete").first()
         assert item is None
+
+    def test_removes_locally_even_if_plaid_revoke_fails(self, db):
+        """Item is deleted from DB even when Plaid API revocation fails."""
+        from database import get_db
+
+        failing_client = MockPlaidClient(should_fail=True)
+
+        def override_get_db():
+            try:
+                yield db
+            finally:
+                pass
+
+        def override_get_plaid_client():
+            return failing_client
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[_get_plaid_client] = override_get_plaid_client
+        client = TestClient(app)
+
+        db.add(PlaidItem(
+            item_id="item-revoke-fail",
+            access_token="access-revoke-fail",
+            institution_name="FailBank",
+        ))
+        db.commit()
+
+        response = client.delete("/api/plaid/items/item-revoke-fail")
+        assert response.status_code == 200
+
+        # Still deleted locally despite remote failure
+        item = db.query(PlaidItem).filter(PlaidItem.item_id == "item-revoke-fail").first()
+        assert item is None
+
+        app.dependency_overrides.clear()
 
     def test_returns_404_for_unknown_item(self, plaid_client):
         response = plaid_client.delete("/api/plaid/items/nonexistent")

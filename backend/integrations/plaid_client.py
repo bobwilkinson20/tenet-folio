@@ -21,7 +21,9 @@ from plaid.configuration import Configuration
 from plaid.model.country_code import CountryCode
 from plaid.model.investments_holdings_get_request import InvestmentsHoldingsGetRequest
 from plaid.model.investments_transactions_get_request import InvestmentsTransactionsGetRequest
+from plaid.model.investments_transactions_get_request_options import InvestmentsTransactionsGetRequestOptions
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.item_remove_request import ItemRemoveRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.products import Products
@@ -157,6 +159,15 @@ class PlaidClient:
             "access_token": response["access_token"],
             "item_id": response["item_id"],
         }
+
+    def remove_item(self, access_token: str) -> None:
+        """Revoke an access token by calling Plaid's /item/remove endpoint.
+
+        Args:
+            access_token: The Item's access token to revoke.
+        """
+        api = self._get_api()
+        api.item_remove(ItemRemoveRequest(access_token=access_token))
 
     # ------------------------------------------------------------------
     # ProviderClient protocol — accounts & holdings
@@ -428,7 +439,7 @@ class PlaidClient:
                 access_token=access_token,
                 start_date=start_date,
                 end_date=end_date,
-                options={"offset": offset},
+                options=InvestmentsTransactionsGetRequestOptions(offset=offset),
             )
 
         return activities

@@ -150,11 +150,18 @@ def list_items(db: Session = Depends(get_db)):
 def remove_item(
     item_id: str,
     db: Session = Depends(get_db),
+    client: PlaidClient = Depends(_get_plaid_client),
 ):
-    """Remove a linked Plaid Item."""
+    """Remove a linked Plaid Item (revokes token with Plaid, then deletes locally)."""
     item = db.query(PlaidItem).filter(PlaidItem.item_id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail=f"Item not found: {item_id}")
+
+    # Revoke the access token with Plaid; proceed with local delete even if this fails
+    try:
+        client.remove_item(item.access_token)
+    except Exception as e:
+        logger.warning("Failed to remove Plaid item remotely (removing locally anyway): %s", e)
 
     db.delete(item)
     db.commit()

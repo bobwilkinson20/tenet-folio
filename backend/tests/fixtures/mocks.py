@@ -1018,6 +1018,11 @@ class MockPlaidClient:
             self._raise_failure()
         return dict(self._exchange_result)
 
+    def remove_item(self, access_token: str) -> None:
+        """Mock item removal (no-op)."""
+        if self._should_fail:
+            self._raise_failure()
+
     def get_accounts(self) -> list[ProviderAccount]:
         """Return mock accounts."""
         if self._should_fail:
