@@ -79,6 +79,14 @@ def sample_holdings_response():
                 "name": "Target Retirement 2045",
                 "iso_currency_code": "USD",
             },
+            {
+                "security_id": "sec_cash",
+                "ticker_symbol": "CUR:USD",
+                "name": "US Dollar",
+                "type": "cash",
+                "is_cash_equivalent": True,
+                "iso_currency_code": "USD",
+            },
         ],
         "holdings": [
             {
@@ -97,6 +105,14 @@ def sample_holdings_response():
                 "institution_price": 50.00,
                 "institution_value": 10000.00,
                 "cost_basis": 9000.00,
+                "iso_currency_code": "USD",
+            },
+            {
+                "account_id": "acc_001",
+                "security_id": "sec_cash",
+                "quantity": 24950.00,
+                "institution_price": 1.00,
+                "institution_value": 24950.00,
                 "iso_currency_code": "USD",
             },
         ],
@@ -432,9 +448,66 @@ class TestMapActivityType:
 # ---------------------------------------------------------------------------
 
 
-class TestCashDerivation:
-    def test_cash_derived_from_balance(self, mock_settings, mock_plaid_api):
-        """Cash = account balance - sum(holdings market values)."""
+class TestCashHandling:
+    def test_cash_security_mapped_to_cash_symbol(self, mock_settings, mock_plaid_api):
+        """Plaid cash securities (type=cash) are mapped to _CASH:{currency}."""
+        client = PlaidClient()
+        securities_map = {
+            "sec_cash": {
+                "security_id": "sec_cash",
+                "ticker_symbol": "CUR:USD",
+                "name": "US Dollar",
+                "type": "cash",
+                "iso_currency_code": "USD",
+            },
+        }
+        holding_data = {
+            "account_id": "acc_001",
+            "security_id": "sec_cash",
+            "quantity": 5000.00,
+            "institution_price": 1.00,
+            "institution_value": 5000.00,
+            "iso_currency_code": "USD",
+        }
+
+        result = client._map_holding(holding_data, securities_map)
+
+        assert result is not None
+        assert result.symbol == "_CASH:USD"
+        assert result.quantity == Decimal("5000")
+        assert result.market_value == Decimal("5000")
+        assert result.price == Decimal("1")
+        assert result.name == "USD Cash"
+
+    def test_cash_equivalent_security_mapped_to_cash(self, mock_settings, mock_plaid_api):
+        """Securities with is_cash_equivalent=True are mapped to _CASH."""
+        client = PlaidClient()
+        securities_map = {
+            "sec_mmf": {
+                "security_id": "sec_mmf",
+                "ticker_symbol": "VMFXX",
+                "name": "Vanguard Federal Money Market",
+                "is_cash_equivalent": True,
+                "iso_currency_code": "USD",
+            },
+        }
+        holding_data = {
+            "account_id": "acc_001",
+            "security_id": "sec_mmf",
+            "quantity": 10000.00,
+            "institution_price": 1.00,
+            "institution_value": 10000.00,
+            "iso_currency_code": "USD",
+        }
+
+        result = client._map_holding(holding_data, securities_map)
+
+        assert result is not None
+        assert result.symbol == "_CASH:USD"
+        assert result.quantity == Decimal("10000")
+
+    def test_cash_from_plaid_holdings_no_derivation(self, mock_settings, mock_plaid_api):
+        """When Plaid provides explicit cash holdings, no cash is derived."""
         client = PlaidClient()
         mock_plaid_api.investments_holdings_get.return_value = {
             "accounts": [
@@ -452,6 +525,13 @@ class TestCashDerivation:
                     "name": "VTI",
                     "iso_currency_code": "USD",
                 },
+                {
+                    "security_id": "sec_cash",
+                    "ticker_symbol": "CUR:USD",
+                    "name": "US Dollar",
+                    "type": "cash",
+                    "iso_currency_code": "USD",
+                },
             ],
             "holdings": [
                 {
@@ -462,24 +542,30 @@ class TestCashDerivation:
                     "institution_value": 22000.00,
                     "iso_currency_code": "USD",
                 },
+                {
+                    "account_id": "acc_001",
+                    "security_id": "sec_cash",
+                    "quantity": 28000.00,
+                    "institution_price": 1.00,
+                    "institution_value": 28000.00,
+                    "iso_currency_code": "USD",
+                },
             ],
         }
 
         with patch("integrations.plaid_client.ApiClient"):
-            holdings, accounts = client._fetch_item_holdings(
+            holdings, _ = client._fetch_item_holdings(
                 mock_plaid_api, "access-token", "Vanguard"
             )
 
-        # VTI holding + cash holding
+        # VTI + cash from Plaid, no derived cash
         assert len(holdings) == 2
         cash_holdings = [h for h in holdings if h.symbol == "_CASH:USD"]
         assert len(cash_holdings) == 1
-        # Cash = 50000 - 22000 = 28000
         assert cash_holdings[0].market_value == Decimal("28000")
-        assert cash_holdings[0].quantity == Decimal("28000")
 
-    def test_no_cash_when_balance_equals_holdings(self, mock_settings, mock_plaid_api):
-        """No cash holding when balance matches holdings total."""
+    def test_no_cash_when_no_cash_security(self, mock_settings, mock_plaid_api):
+        """No cash holding when Plaid doesn't provide a cash security."""
         client = PlaidClient()
         mock_plaid_api.investments_holdings_get.return_value = {
             "accounts": [
@@ -600,7 +686,7 @@ class TestSyncAll:
         assert result.accounts[0].name == "My Brokerage"
         assert result.accounts[0].institution == "Vanguard"
 
-        # 2 holdings + 1 cash (50000 - 15050 - 10000 = 24950)
+        # AAPL + synthetic fund + cash from Plaid's cash security
         assert len(result.holdings) == 3
         symbols = [h.symbol for h in result.holdings]
         assert "AAPL" in symbols

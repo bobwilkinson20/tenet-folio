@@ -313,35 +313,13 @@ class PlaidClient:
 
         # Map holdings
         holdings: list[ProviderHolding] = []
-        holdings_value_by_account: dict[str, Decimal] = {}
+        accounts_with_cash: set[str] = set()
         for h in response.get("holdings", []) or []:
             holding = self._map_holding(h, securities_map)
             if holding:
                 holdings.append(holding)
-                holdings_value_by_account[holding.account_id] = (
-                    holdings_value_by_account.get(holding.account_id, Decimal("0"))
-                    + holding.market_value
-                )
-
-        # Derive cash: account balance - sum(holdings) per account
-        for acct in response.get("accounts", []) or []:
-            acct_id = acct.get("account_id", "")
-            balances = acct.get("balances") or {}
-            current = self._to_decimal(balances.get("current"))
-            if current is not None and acct_id:
-                holdings_total = holdings_value_by_account.get(acct_id, Decimal("0"))
-                cash = current - holdings_total
-                if cash != 0:
-                    currency = (balances.get("iso_currency_code") or "USD").upper()
-                    holdings.append(ProviderHolding(
-                        account_id=acct_id,
-                        symbol=f"_CASH:{currency}",
-                        quantity=cash,
-                        price=Decimal("1"),
-                        market_value=cash,
-                        currency=currency,
-                        name=f"{currency} Cash",
-                    ))
+                if holding.symbol.startswith("_CASH:"):
+                    accounts_with_cash.add(holding.account_id)
 
         return holdings, accounts
 
@@ -359,6 +337,27 @@ class PlaidClient:
         if quantity is None or quantity == 0:
             return None
 
+        # Currency
+        currency = (
+            holding.get("iso_currency_code")
+            or security.get("iso_currency_code")
+            or "USD"
+        ).upper()
+
+        # Detect cash securities (e.g. ticker "CUR:USD" with type "cash")
+        sec_type = str(security.get("type") or "").lower()
+        is_cash = sec_type == "cash" or security.get("is_cash_equivalent") is True
+        if is_cash:
+            return ProviderHolding(
+                account_id=account_id,
+                symbol=f"_CASH:{currency}",
+                quantity=quantity,
+                price=Decimal("1"),
+                market_value=quantity,
+                currency=currency,
+                name=f"{currency} Cash",
+            )
+
         price = self._to_decimal(holding.get("institution_price")) or Decimal("0")
         market_value = self._to_decimal(holding.get("institution_value")) or Decimal("0")
 
@@ -371,13 +370,6 @@ class PlaidClient:
                 return None
 
         name = security.get("name")
-
-        # Currency
-        currency = (
-            holding.get("iso_currency_code")
-            or security.get("iso_currency_code")
-            or "USD"
-        ).upper()
 
         # Cost basis: Plaid provides total cost_basis, convert to per-unit
         cost_basis: Decimal | None = None
