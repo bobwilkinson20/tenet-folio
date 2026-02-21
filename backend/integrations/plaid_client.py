@@ -96,11 +96,9 @@ class PlaidClient:
                 )
                 host = Environment.Sandbox
             logger.info(
-                "Plaid API client: environment=%s, host=%s, client_id=%s...%s",
+                "Plaid API client: environment=%s, host=%s, client_id=<configured>",
                 env_key,
                 host,
-                self._client_id[:6] if len(self._client_id) > 6 else "???",
-                self._client_id[-4:] if len(self._client_id) > 4 else "",
             )
             configuration = Configuration(
                 host=host,
