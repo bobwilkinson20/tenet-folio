@@ -13,6 +13,11 @@ class PlaidItem(Base):
 
     Each institution linked via Plaid Link gets its own access_token,
     stored here for use during sync operations.
+
+    Unlike other providers whose credentials live in macOS Keychain or
+    env vars, Plaid access tokens are per-institution and long-lived,
+    making Keychain storage impractical. These tokens are protected at
+    rest by SQLCipher database encryption.
     """
 
     __tablename__ = "plaid_items"

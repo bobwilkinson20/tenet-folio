@@ -5,11 +5,12 @@ via the plaid-python SDK, fetching investment holdings, accounts, and
 transaction history.
 
 Unlike other providers, Plaid uses per-institution access tokens (Items).
-The sync_all() method accepts a list of (access_token, institution_name)
-tuples loaded from the PlaidItem DB table.
+The sync_all() method loads access tokens from the PlaidItem DB table
+internally, keeping the sync service free of provider-specific logic.
 """
 
 import hashlib
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -577,7 +578,6 @@ class PlaidClient:
         # Try to extract error_code from the body
         error_code = ""
         try:
-            import json
             body = json.loads(exc.body) if exc.body else {}
             error_code = body.get("error_code", "")
             error_message = body.get("error_message", "")

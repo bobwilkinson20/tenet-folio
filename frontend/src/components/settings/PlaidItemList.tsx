@@ -7,6 +7,7 @@ export function PlaidItemList() {
   const [items, setItems] = useState<PlaidItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -26,11 +27,12 @@ export function PlaidItemList() {
 
   const handleRemove = async (itemId: string) => {
     setRemovingId(itemId);
+    setRemoveError(null);
     try {
       await plaidApi.removeItem(itemId);
       setItems((prev) => prev.filter((i) => i.item_id !== itemId));
     } catch {
-      // ignore
+      setRemoveError("Failed to remove institution. Please try again.");
     } finally {
       setRemovingId(null);
     }
@@ -44,6 +46,10 @@ export function PlaidItemList() {
         </span>
         <PlaidLinkButton onSuccess={fetchItems} />
       </div>
+
+      {removeError && (
+        <p className="text-xs text-tf-negative">{removeError}</p>
+      )}
 
       {loading && items.length === 0 ? (
         <p className="text-xs text-tf-text-tertiary">Loading...</p>

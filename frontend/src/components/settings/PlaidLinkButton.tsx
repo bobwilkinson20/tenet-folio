@@ -50,11 +50,9 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
   );
 
   const handleExit = useCallback(
-    (err: PlaidLinkError | null, metadata: PlaidLinkOnExitMetadata) => {
-      console.log("[Plaid Link] exit", { err, status: metadata?.status, institution: metadata?.institution?.name });
+    (err: PlaidLinkError | null, _metadata: PlaidLinkOnExitMetadata) => {
       if (err) {
         const msg = err.display_message || err.error_message || err.error_code || "Plaid Link closed with an error";
-        console.error("[Plaid Link] error:", err);
         setError(msg);
       }
       setLinkToken(null);
@@ -63,8 +61,9 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
   );
 
   const handleEvent = useCallback(
-    (eventName: string, metadata: PlaidLinkOnEventMetadata) => {
-      console.log("[Plaid Link] event:", eventName, metadata);
+    (_eventName: string, _metadata: PlaidLinkOnEventMetadata) => {
+      // Available for debugging: uncomment to trace Plaid Link events
+      // console.log("[Plaid Link] event:", _eventName, _metadata);
     },
     [],
   );
