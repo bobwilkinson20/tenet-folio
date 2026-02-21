@@ -50,7 +50,7 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
 
   const handleExit = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    (err: PlaidLinkError | null, metadata: PlaidLinkOnExitMetadata) => {
+    (err: PlaidLinkError | null, _metadata: PlaidLinkOnExitMetadata) => {
       if (err) {
         const msg = err.display_message || err.error_message || err.error_code || "Plaid Link closed with an error";
         setError(msg);
