@@ -3,7 +3,6 @@ import {
   usePlaidLink,
   type PlaidLinkError,
   type PlaidLinkOnExitMetadata,
-  type PlaidLinkOnEventMetadata,
   type PlaidLinkOnSuccessMetadata,
 } from "react-plaid-link";
 import { plaidApi } from "@/api/plaid";
@@ -50,7 +49,8 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
   );
 
   const handleExit = useCallback(
-    (err: PlaidLinkError | null, _metadata: PlaidLinkOnExitMetadata) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    (err: PlaidLinkError | null, metadata: PlaidLinkOnExitMetadata) => {
       if (err) {
         const msg = err.display_message || err.error_message || err.error_code || "Plaid Link closed with an error";
         setError(msg);
@@ -60,19 +60,10 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
     [],
   );
 
-  const handleEvent = useCallback(
-    (_eventName: string, _metadata: PlaidLinkOnEventMetadata) => {
-      // Available for debugging: uncomment to trace Plaid Link events
-      // console.log("[Plaid Link] event:", _eventName, _metadata);
-    },
-    [],
-  );
-
   const { open, ready } = usePlaidLink({
     token: linkToken,
     onSuccess: handlePlaidSuccess,
     onExit: handleExit,
-    onEvent: handleEvent,
   });
 
   // Open Plaid Link once when the token is ready
