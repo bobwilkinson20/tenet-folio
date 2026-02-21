@@ -53,6 +53,11 @@ class PlaidItemResponse(BaseModel):
     created_at: str | None = None
 
 
+class RemoveItemResponse(BaseModel):
+    status: str
+    item_id: str
+
+
 # ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
@@ -146,7 +151,7 @@ def list_items(db: Session = Depends(get_db)):
     ]
 
 
-@router.delete("/items/{item_id}")
+@router.delete("/items/{item_id}", response_model=RemoveItemResponse)
 def remove_item(
     item_id: str,
     db: Session = Depends(get_db),
@@ -166,4 +171,4 @@ def remove_item(
     db.delete(item)
     db.commit()
     logger.info("Deleted PlaidItem %s", item_id)
-    return {"status": "ok", "item_id": item_id}
+    return RemoveItemResponse(status="ok", item_id=item_id)
