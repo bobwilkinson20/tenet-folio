@@ -344,10 +344,11 @@ class PlaidClient:
             or "USD"
         ).upper()
 
-        # Detect cash securities (e.g. ticker "CUR:USD" with type "cash")
+        # Detect cash securities (e.g. ticker "CUR:USD" with type "cash").
+        # Only use the explicit type field — is_cash_equivalent is unreliable
+        # (some institutions flag crypto as cash equivalent).
         sec_type = str(security.get("type") or "").lower()
-        is_cash = sec_type == "cash" or security.get("is_cash_equivalent") is True
-        if is_cash:
+        if sec_type == "cash":
             return ProviderHolding(
                 account_id=account_id,
                 symbol=f"_CASH:{currency}",

@@ -84,7 +84,6 @@ def sample_holdings_response():
                 "ticker_symbol": "CUR:USD",
                 "name": "US Dollar",
                 "type": "cash",
-                "is_cash_equivalent": True,
                 "iso_currency_code": "USD",
             },
         ],
@@ -479,8 +478,12 @@ class TestCashHandling:
         assert result.price == Decimal("1")
         assert result.name == "USD Cash"
 
-    def test_cash_equivalent_security_mapped_to_cash(self, mock_settings, mock_plaid_api):
-        """Securities with is_cash_equivalent=True are mapped to _CASH."""
+    def test_cash_equivalent_not_treated_as_cash(self, mock_settings, mock_plaid_api):
+        """Securities with only is_cash_equivalent=True are NOT mapped to cash.
+
+        The is_cash_equivalent flag is unreliable — some institutions flag
+        crypto as cash equivalent. Only the explicit type="cash" field is used.
+        """
         client = PlaidClient()
         securities_map = {
             "sec_mmf": {
@@ -503,8 +506,37 @@ class TestCashHandling:
         result = client._map_holding(holding_data, securities_map)
 
         assert result is not None
-        assert result.symbol == "_CASH:USD"
+        assert result.symbol == "VMFXX"
         assert result.quantity == Decimal("10000")
+
+    def test_crypto_not_mapped_to_cash(self, mock_settings, mock_plaid_api):
+        """Cryptocurrency holdings are NOT mapped to cash."""
+        client = PlaidClient()
+        securities_map = {
+            "sec_btc": {
+                "security_id": "sec_btc",
+                "ticker_symbol": "BTC",
+                "name": "Bitcoin",
+                "type": "cryptocurrency",
+                "is_cash_equivalent": True,  # unreliable flag — should be ignored
+                "iso_currency_code": "USD",
+            },
+        }
+        holding_data = {
+            "account_id": "acc_001",
+            "security_id": "sec_btc",
+            "quantity": 0.5,
+            "institution_price": 50000.00,
+            "institution_value": 25000.00,
+            "iso_currency_code": "USD",
+        }
+
+        result = client._map_holding(holding_data, securities_map)
+
+        assert result is not None
+        assert result.symbol == "BTC"
+        assert result.quantity == Decimal("0.5")
+        assert result.price == Decimal("50000")
 
     def test_cash_from_plaid_holdings_no_derivation(self, mock_settings, mock_plaid_api):
         """When Plaid provides explicit cash holdings, no cash is derived."""
