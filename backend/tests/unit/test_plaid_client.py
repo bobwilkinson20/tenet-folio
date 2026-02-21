@@ -568,21 +568,15 @@ class TestErrorMapping:
 
 
 class TestSyncAll:
-    def test_sync_all_empty_tokens(self, mock_settings, mock_plaid_api):
-        """sync_all with no access tokens returns empty result."""
+    def test_sync_all_no_items(self, mock_settings, mock_plaid_api):
+        """sync_all with no PlaidItems in DB returns empty result."""
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        result = client.sync_all(access_tokens=[])
+        with patch.object(client, "_load_access_tokens", return_value=[]):
+            result = client.sync_all()
         assert result.holdings == []
         assert result.accounts == []
         assert result.activities == []
-
-    def test_sync_all_none_tokens(self, mock_settings, mock_plaid_api):
-        """sync_all with None returns empty result."""
-        with patch("integrations.plaid_client.ApiClient"):
-            client = PlaidClient()
-        result = client.sync_all(access_tokens=None)
-        assert result.holdings == []
 
     def test_sync_all_with_data(
         self,
@@ -597,9 +591,9 @@ class TestSyncAll:
 
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        result = client.sync_all(
-            access_tokens=[("access-token-1", "Vanguard")]
-        )
+        tokens = [("access-token-1", "Vanguard")]
+        with patch.object(client, "_load_access_tokens", return_value=tokens):
+            result = client.sync_all()
 
         assert isinstance(result, ProviderSyncResult)
         assert len(result.accounts) == 1
@@ -626,9 +620,9 @@ class TestSyncAll:
 
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        result = client.sync_all(
-            access_tokens=[("bad-token", "Chase")]
-        )
+        tokens = [("bad-token", "Chase")]
+        with patch.object(client, "_load_access_tokens", return_value=tokens):
+            result = client.sync_all()
 
         assert len(result.errors) == 1
         assert result.errors[0].category == ErrorCategory.AUTH

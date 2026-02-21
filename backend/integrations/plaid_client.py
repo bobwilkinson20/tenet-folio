@@ -185,19 +185,36 @@ class PlaidClient:
     # sync_all
     # ------------------------------------------------------------------
 
-    def sync_all(
-        self,
-        access_tokens: list[tuple[str, str]] | None = None,
-    ) -> ProviderSyncResult:
+    def _load_access_tokens(self) -> list[tuple[str, str]]:
+        """Load access tokens from the PlaidItem DB table.
+
+        Returns:
+            List of ``(access_token, institution_name)`` tuples.
+        """
+        from database import get_db
+        from models.plaid_item import PlaidItem
+
+        db = next(get_db())
+        try:
+            plaid_items = db.query(PlaidItem).all()
+            return [
+                (item.access_token, item.institution_name or "Unknown")
+                for item in plaid_items
+            ]
+        finally:
+            db.close()
+
+    def sync_all(self) -> ProviderSyncResult:
         """Fetch all data from Plaid across all linked Items.
 
-        Args:
-            access_tokens: List of ``(access_token, institution_name)`` tuples.
-                If None or empty, returns an empty result.
+        Loads access tokens from the PlaidItem DB table internally,
+        keeping the sync_service free of provider-specific logic.
 
         Returns:
             ProviderSyncResult with holdings, accounts, activities, and errors.
         """
+        access_tokens = self._load_access_tokens()
+
         if not access_tokens:
             return ProviderSyncResult(holdings=[], accounts=[], errors=[], activities=[])
 

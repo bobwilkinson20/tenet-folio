@@ -1037,10 +1037,7 @@ class MockPlaidClient:
             return [h for h in self._holdings if h.account_id == account_id]
         return list(self._holdings)
 
-    def sync_all(
-        self,
-        access_tokens: list[tuple[str, str]] | None = None,
-    ) -> ProviderSyncResult:
+    def sync_all(self) -> ProviderSyncResult:
         """Return mock sync result."""
         if self._should_fail:
             self._raise_failure()
