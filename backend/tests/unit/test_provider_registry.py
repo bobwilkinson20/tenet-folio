@@ -280,14 +280,14 @@ class TestProviderHolding:
 class TestProviderDefinitions:
     """Tests for PROVIDER_DEFINITIONS and ALL_PROVIDER_NAMES."""
 
-    def test_definitions_has_five_entries(self):
-        """PROVIDER_DEFINITIONS lists all five providers."""
-        assert len(PROVIDER_DEFINITIONS) == 5
+    def test_definitions_has_six_entries(self):
+        """PROVIDER_DEFINITIONS lists all six providers."""
+        assert len(PROVIDER_DEFINITIONS) == 6
 
     def test_definitions_names(self):
         """PROVIDER_DEFINITIONS contains the expected provider names."""
         names = [name for name, _, _ in PROVIDER_DEFINITIONS]
-        assert names == ["SnapTrade", "SimpleFIN", "IBKR", "Coinbase", "Schwab"]
+        assert names == ["SnapTrade", "SimpleFIN", "IBKR", "Coinbase", "Schwab", "Plaid"]
 
     def test_all_provider_names_matches_definitions(self):
         """ALL_PROVIDER_NAMES is derived from PROVIDER_DEFINITIONS."""
@@ -323,6 +323,7 @@ class TestInitializeDefaultProviders:
             setattr(mod, "IBKRFlexClient", mock_cls)
             setattr(mod, "CoinbaseClient", mock_cls)
             setattr(mod, "SchwabClient", mock_cls)
+            setattr(mod, "PlaidClient", mock_cls)
             return mod
 
         with patch("integrations.provider_registry.importlib.import_module", side_effect=selective_import):
@@ -330,7 +331,7 @@ class TestInitializeDefaultProviders:
 
         # SnapTrade should be skipped, others should be registered
         assert not registry.is_configured("SnapTrade")
-        assert len(registry.list_providers()) == 4
+        assert len(registry.list_providers()) == 5
 
     def test_constructor_exception_skips_provider(self):
         """Exception in constructor skips that provider, others still register."""
@@ -361,7 +362,7 @@ class TestInitializeDefaultProviders:
 
         # Coinbase should fail, others should be registered
         assert not registry.is_configured("Coinbase")
-        assert len(registry.list_providers()) == 4
+        assert len(registry.list_providers()) == 5
 
     def test_loop_iterates_all_definitions(self):
         """The loop calls import_module for each definition."""

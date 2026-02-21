@@ -11,12 +11,12 @@ from tests.fixtures.mocks import MockProviderRegistry, MockSnapTradeClient
 class TestListProviders:
     """Tests for ProviderService.list_providers."""
 
-    def test_returns_all_five_providers(self, db):
+    def test_returns_all_six_providers(self, db):
         """Returns all known providers even with no data."""
         result = ProviderService.list_providers(db)
         names = [p.name for p in result]
         assert names == ALL_PROVIDER_NAMES
-        assert len(result) == 5
+        assert len(result) == 6
 
     def test_default_enabled(self, db):
         """All providers are enabled by default (no rows)."""

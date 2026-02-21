@@ -17,6 +17,7 @@ export function isSyntheticTicker(ticker: string): boolean {
   return (
     ticker.startsWith("_SF:") ||
     ticker.startsWith("_MAN:") ||
+    ticker.startsWith("_PLAID:") ||
     ticker === ZERO_BALANCE_TICKER
   );
 }

@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     SCHWAB_CALLBACK_URL: str = "https://127.0.0.1"
     SCHWAB_TOKEN_PATH: str = ""
 
+    # Plaid API credentials (optional)
+    PLAID_CLIENT_ID: str = ""
+    PLAID_SECRET: str = ""
+    PLAID_ENVIRONMENT: str = "sandbox"
+
     @field_validator("COINBASE_API_SECRET", mode="before")
     @classmethod
     def normalize_pem_newlines(cls, v: str) -> str:

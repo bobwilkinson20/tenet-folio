@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { providersApi } from "@/api";
 import type { ProviderStatus } from "@/types/provider";
+import { PlaidItemList } from "./PlaidItemList";
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   SnapTrade: "Brokerage aggregator supporting many institutions",
@@ -12,6 +13,7 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   IBKR: "Interactive Brokers via Flex Web Service",
   Coinbase: "Cryptocurrency exchange via Advanced Trade API",
   Schwab: "Charles Schwab brokerage accounts",
+  Plaid: "Bank and investment aggregator via Plaid Link",
 };
 
 function formatSyncTime(isoString: string): string {
@@ -141,6 +143,9 @@ export function ProviderList() {
                   </span>
                 )}
               </div>
+              {provider.name === "Plaid" && provider.has_credentials && (
+                <PlaidItemList />
+              )}
             </div>
           </div>
         ))}

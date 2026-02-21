@@ -8,4 +8,5 @@ export { securitiesApi } from "./securities";
 export { syncApi } from "./sync";
 export type { SyncSession } from "./sync";
 export { preferencesApi } from "./preferences";
+export { plaidApi } from "./plaid";
 export { providersApi } from "./providers";

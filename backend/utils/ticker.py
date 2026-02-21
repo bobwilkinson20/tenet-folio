@@ -19,6 +19,7 @@ def is_synthetic_ticker(ticker: str) -> bool:
     return (
         ticker.startswith("_SF:")
         or ticker.startswith("_MAN:")
+        or ticker.startswith("_PLAID:")
         or ticker == ZERO_BALANCE_TICKER
     )
 

@@ -613,7 +613,16 @@ class SyncService:
         # Use sync_all() if available, otherwise fall back to get_holdings()
         sync_result: ProviderSyncResult | None = None
         if hasattr(provider, "sync_all"):
-            sync_result = provider.sync_all()
+            if provider_name == "Plaid":
+                from models.plaid_item import PlaidItem
+                plaid_items = db.query(PlaidItem).all()
+                access_tokens = [
+                    (item.access_token, item.institution_name or "Unknown")
+                    for item in plaid_items
+                ]
+                sync_result = provider.sync_all(access_tokens=access_tokens)
+            else:
+                sync_result = provider.sync_all()
             remote_holdings = sync_result.holdings
         else:
             remote_holdings = provider.get_holdings()
