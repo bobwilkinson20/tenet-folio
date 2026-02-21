@@ -313,13 +313,10 @@ class PlaidClient:
 
         # Map holdings
         holdings: list[ProviderHolding] = []
-        accounts_with_cash: set[str] = set()
         for h in response.get("holdings", []) or []:
             holding = self._map_holding(h, securities_map)
             if holding:
                 holdings.append(holding)
-                if holding.symbol.startswith("_CASH:"):
-                    accounts_with_cash.add(holding.account_id)
 
         return holdings, accounts
 
