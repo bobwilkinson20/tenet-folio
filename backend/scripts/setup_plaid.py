@@ -60,7 +60,6 @@ def validate_credentials(client_id: str, secret: str, env: str) -> None:
     """
     env_map = {
         "sandbox": Environment.Sandbox,
-        "development": "https://development.plaid.com",
         "production": Environment.Production,
     }
     host = env_map.get(env.lower(), Environment.Sandbox)
@@ -109,10 +108,9 @@ def main():
     print()
     print("Choose environment:")
     print("  1. sandbox (for testing with fake data)")
-    print("  2. development (for testing with real banks, free)")
-    print("  3. production (for live use)")
-    env_choice = input("Enter choice (1, 2, or 3) [1]: ").strip() or "1"
-    env_map_choice = {"1": "sandbox", "2": "development", "3": "production"}
+    print("  2. production (for live use)")
+    env_choice = input("Enter choice (1 or 2) [1]: ").strip() or "1"
+    env_map_choice = {"1": "sandbox", "2": "production"}
     env = env_map_choice.get(env_choice, "sandbox")
 
     print()

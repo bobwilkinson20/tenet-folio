@@ -75,7 +75,7 @@ def create_link_token(
         if "INVALID_API_KEYS" in error_detail:
             hint = (
                 "Plaid rejected the credentials. Check that PLAID_ENVIRONMENT "
-                "matches your keys (sandbox, development, or production). "
+                "matches your keys (sandbox or production). "
                 "Each environment has different secrets."
             )
             logger.error("Plaid INVALID_API_KEYS: %s", hint)

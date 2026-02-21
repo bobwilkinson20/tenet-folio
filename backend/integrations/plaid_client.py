@@ -42,11 +42,10 @@ from integrations.provider_protocol import (
 logger = logging.getLogger(__name__)
 
 # Map PLAID_ENVIRONMENT setting to SDK host URLs.
-# Plaid has three environments; the SDK only defines Sandbox and Production,
-# so Development is specified as a raw URL.
+# Plaid's Development environment is deprecated; only sandbox and production
+# are supported.
 _ENVIRONMENT_MAP: dict[str, str] = {
     "sandbox": Environment.Sandbox,
-    "development": "https://development.plaid.com",
     "production": Environment.Production,
 }
 
@@ -92,7 +91,7 @@ class PlaidClient:
             if host is None:
                 logger.warning(
                     "Unknown PLAID_ENVIRONMENT=%r, falling back to sandbox. "
-                    "Valid values: sandbox, development, production",
+                    "Valid values: sandbox, production",
                     self._environment,
                 )
                 host = Environment.Sandbox
