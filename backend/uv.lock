@@ -1722,7 +1722,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "ibflex", specifier = ">=0.15" },
     { name = "keyring", specifier = ">=25.0.0" },
-    { name = "plaid-python", specifier = ">=29.0.0" },
+    { name = "plaid-python", specifier = ">=38.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
