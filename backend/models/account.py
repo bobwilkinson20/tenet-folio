@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from database import Base
 from models.utils import generate_uuid
@@ -30,6 +30,10 @@ class Account(Base):
     name_user_edited = Column(Boolean, default=False)  # True if user has customized the name
     institution_name = Column(String, nullable=True)  # Financial institution (e.g., "Vanguard")
     is_active = Column(Boolean, default=True)
+    deactivated_at = Column(DateTime, nullable=True)  # Set when is_active transitions to False
+    superseded_by_account_id = Column(
+        String(36), ForeignKey("accounts.id"), nullable=True
+    )  # Points to the replacement account (e.g., Plaid account replacing SimpleFIN)
     account_type = Column(String, nullable=True)
     include_in_allocation = Column(Boolean, default=True, nullable=False)
     assigned_asset_class_id = Column(
@@ -53,3 +57,9 @@ class Account(Base):
     account_snapshots = relationship("AccountSnapshot", back_populates="account")
     activities = relationship("Activity", back_populates="account")
     holding_lots = relationship("HoldingLot", back_populates="account")
+    superseded_by = relationship(
+        "Account",
+        foreign_keys=[superseded_by_account_id],
+        backref=backref("supersedes", uselist=False),
+        remote_side="Account.id",
+    )

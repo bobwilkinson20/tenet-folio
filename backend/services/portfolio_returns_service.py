@@ -100,14 +100,18 @@ class PortfolioReturnsService:
         periods: list[str],
         account_ids: list[str] | None = None,
     ) -> ScopeReturns:
-        """Compute returns across active, included accounts (portfolio-level).
+        """Compute returns across all allocation accounts (portfolio-level).
 
-        Only accounts with is_active=True AND include_in_allocation=True
-        contribute to portfolio-level returns. When account_ids is provided,
-        results are further restricted to that subset.
+        Includes both active and inactive accounts with include_in_allocation=True.
+        Inactive accounts (e.g. a SimpleFIN account superseded by Plaid) still
+        contributed real historical value and cash flows, so excluding them would
+        silently corrupt returns for any period that overlaps their history.
+        Their closing $0 DHV sentinel naturally prevents double-counting after
+        the deactivation date.
+
+        When account_ids is provided, results are further restricted to that subset.
         """
         query = db.query(Account).filter(
-            Account.is_active.is_(True),
             Account.include_in_allocation.is_(True),
         )
         if account_ids is not None:
@@ -115,7 +119,7 @@ class PortfolioReturnsService:
         filtered_ids = [acc.id for acc in query.all()]
         return self._compute_scope_returns(
             db, periods, scope_id="portfolio", scope_name="Portfolio",
-            account_ids=filtered_ids or None,
+            account_ids=filtered_ids,
         )
 
     def get_account_returns(
@@ -271,7 +275,7 @@ class PortfolioReturnsService:
                 DailyHoldingValue.valuation_date <= end,
             )
         )
-        if account_ids:
+        if account_ids is not None:
             query = query.filter(DailyHoldingValue.account_id.in_(account_ids))
 
         query = query.group_by(DailyHoldingValue.valuation_date)
@@ -354,7 +358,7 @@ class PortfolioReturnsService:
             Activity.activity_date <= end_dt,
         )
 
-        if account_ids:
+        if account_ids is not None:
             query = query.filter(Activity.account_id.in_(account_ids))
 
         activities = query.all()

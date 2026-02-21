@@ -4,6 +4,7 @@ import { AccountList } from "../components/accounts/AccountList";
 import { CreateManualAccountModal } from "../components/accounts/CreateManualAccountModal";
 import { EditAccountDialog } from "../components/accounts/EditAccountDialog";
 import { DeleteAccountDialog } from "../components/accounts/DeleteAccountDialog";
+import { DeactivateAccountDialog } from "../components/accounts/DeactivateAccountDialog";
 import { SyncButton } from "../components/dashboard/SyncButton";
 import { SyncLogModal } from "../components/dashboard/SyncLogModal";
 import { syncApi } from "../api";
@@ -22,6 +23,7 @@ export function AccountsPage() {
   const [showCreateManual, setShowCreateManual] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
+  const [deactivatingAccount, setDeactivatingAccount] = useState<Account | null>(null);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -66,17 +68,22 @@ export function AccountsPage() {
     setEditingAccount(account);
   };
 
-  const handleToggleActive = async (account: Account) => {
-    const newIsActive = !account.is_active;
-    // Optimistic update
-    updateAccount(account.id, { is_active: newIsActive });
-    try {
-      await accountsApi.update(account.id, { is_active: newIsActive });
-    } catch (error) {
-      // Revert on failure
-      updateAccount(account.id, { is_active: account.is_active });
-      console.error("Failed to update account:", error);
+  const handleToggleActive = (account: Account) => {
+    if (account.is_active) {
+      // Deactivating: open the dialog to allow closing snapshot + replacement link
+      setDeactivatingAccount(account);
+    } else {
+      // Re-activating: simple optimistic toggle, no dialog needed
+      updateAccount(account.id, { is_active: true });
+      accountsApi.update(account.id, { is_active: true }).catch((error) => {
+        updateAccount(account.id, { is_active: false });
+        console.error("Failed to reactivate account:", error);
+      });
     }
+  };
+
+  const handleDeactivated = (updated: Account) => {
+    updateAccount(updated.id, updated);
   };
 
   const handleDelete = (account: Account) => {
@@ -141,6 +148,14 @@ export function AccountsPage() {
         account={deletingAccount}
         onClose={() => setDeletingAccount(null)}
         onDeleted={handleDeleteConfirmed}
+      />
+
+      <DeactivateAccountDialog
+        isOpen={!!deactivatingAccount}
+        account={deactivatingAccount}
+        allAccounts={accounts}
+        onClose={() => setDeactivatingAccount(null)}
+        onDeactivated={handleDeactivated}
       />
 
       <SyncLogModal

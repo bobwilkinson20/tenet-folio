@@ -317,15 +317,26 @@ export function AccountList({
                 )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm overflow-hidden">
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                    account.is_active
-                      ? "bg-tf-positive/10 text-tf-positive"
-                      : "bg-tf-bg-elevated text-tf-text-secondary"
-                  }`}
-                >
-                  {account.is_active ? "Active" : "Inactive"}
-                </span>
+                <div className="flex flex-col gap-1">
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-semibold self-start ${
+                      account.is_active
+                        ? "bg-tf-positive/10 text-tf-positive"
+                        : "bg-tf-bg-elevated text-tf-text-secondary"
+                    }`}
+                  >
+                    {account.is_active ? "Active" : "Inactive"}
+                  </span>
+                  {!account.is_active && account.superseded_by_name && (
+                    <span
+                      className="text-xs text-tf-text-tertiary truncate max-w-[120px]"
+                      title={`Replaced by: ${account.superseded_by_name}`}
+                      data-testid={`superseded-by-badge-${account.id}`}
+                    >
+                      &rarr; {account.superseded_by_name}
+                    </span>
+                  )}
+                </div>
               </td>
               <td
                 className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-tf-text-primary overflow-hidden text-ellipsis"

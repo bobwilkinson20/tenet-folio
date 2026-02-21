@@ -27,7 +27,7 @@ export function ReturnsPage() {
   const navigate = useNavigate();
 
   const fetchReturns = useCallback(
-    () => portfolioApi.getReturns({ periods: PERIODS }),
+    () => portfolioApi.getReturns({ periods: PERIODS, include_inactive: true }),
     []
   );
   const { data, loading, refetch } = useFetch(fetchReturns);

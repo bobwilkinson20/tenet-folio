@@ -112,7 +112,10 @@ class GroupBy(str, Enum):
 
 
 def _get_account_ids_for_filter(
-    db: Session, allocation_only: bool, account_ids: list[str] | None = None
+    db: Session,
+    allocation_only: bool,
+    account_ids: list[str] | None = None,
+    include_inactive: bool = False,
 ) -> list[str] | None:
     """Get filtered account IDs or None for all accounts.
 
@@ -120,13 +123,18 @@ def _get_account_ids_for_filter(
         db: Database session
         allocation_only: If True, return only allocation account IDs
         account_ids: If provided, restrict to these account IDs
+        include_inactive: If True, include inactive accounts in results.
+            Use for historical queries where deactivated accounts' past
+            data should remain visible.
 
     Returns:
         List of account IDs if filtering, None if all accounts
     """
-    if not allocation_only and account_ids is None:
-        return None
-    query = db.query(Account.id).filter(Account.is_active.is_(True))
+    if not allocation_only and account_ids is None and include_inactive:
+        return None  # No filter needed — all accounts, all history
+    query = db.query(Account.id)
+    if not include_inactive:
+        query = query.filter(Account.is_active.is_(True))
     if allocation_only:
         query = query.filter(Account.include_in_allocation.is_(True))
     if account_ids is not None:
@@ -155,7 +163,13 @@ def get_value_history(
     - asset_class: one series per asset class (using classification waterfall)
     """
     parsed_ids = parse_account_ids(account_ids)
-    filtered_ids = _get_account_ids_for_filter(db, allocation_only, parsed_ids)
+    # Historical charts include inactive accounts — their past DHV records are
+    # factually accurate and should remain visible after deactivation.
+    # Current-state views (dashboard, allocations) continue to filter to
+    # is_active=True only via separate calls.
+    filtered_ids = _get_account_ids_for_filter(
+        db, allocation_only, parsed_ids, include_inactive=True
+    )
 
     # Determine date range from stored data
     date_query = db.query(
