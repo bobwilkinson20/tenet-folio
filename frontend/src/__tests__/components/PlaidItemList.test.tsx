@@ -72,8 +72,9 @@ describe("PlaidItemList", () => {
     });
   });
 
-  it("removes an item when Remove is clicked", async () => {
+  it("removes an item when Remove is confirmed", async () => {
     mockedRemoveItem.mockResolvedValue({ data: { status: "ok" } } as never);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<PlaidItemList />);
 
@@ -87,6 +88,21 @@ describe("PlaidItemList", () => {
     await waitFor(() => {
       expect(mockedRemoveItem).toHaveBeenCalledWith("item-1");
     });
+  });
+
+  it("does not remove when confirmation is cancelled", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<PlaidItemList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Chase")).toBeInTheDocument();
+    });
+
+    const removeButtons = screen.getAllByText("Remove");
+    fireEvent.click(removeButtons[0]);
+
+    expect(mockedRemoveItem).not.toHaveBeenCalled();
   });
 
   it("renders Link Institution button", async () => {

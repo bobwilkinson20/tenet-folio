@@ -27,7 +27,12 @@ export function PlaidItemList() {
     fetchItems();
   }, [fetchItems]);
 
-  const handleRemove = async (itemId: string) => {
+  const handleRemove = async (itemId: string, institutionName: string) => {
+    const confirmed = window.confirm(
+      `Remove ${institutionName}? This will revoke access and you'll need to re-link to sync again.`,
+    );
+    if (!confirmed) return;
+
     setRemovingId(itemId);
     setRemoveError(null);
     try {
@@ -74,7 +79,7 @@ export function PlaidItemList() {
                 {item.institution_name || item.item_id}
               </span>
               <button
-                onClick={() => handleRemove(item.item_id)}
+                onClick={() => handleRemove(item.item_id, item.institution_name || item.item_id)}
                 disabled={removingId === item.item_id}
                 className="text-xs text-tf-negative hover:underline disabled:opacity-50"
               >
