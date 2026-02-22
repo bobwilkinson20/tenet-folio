@@ -21,6 +21,7 @@ class ScopeReturnsResponse(BaseModel):
     scope_id: str  # "portfolio" or account UUID
     scope_name: str
     periods: list[PeriodReturn]
+    chained_from: list[str] = []
 
 
 class PortfolioReturnsResponse(BaseModel):

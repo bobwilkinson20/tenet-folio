@@ -60,6 +60,7 @@ export interface ScopeReturns {
   scope_id: string;
   scope_name: string;
   periods: PeriodReturn[];
+  chained_from: string[];
 }
 
 export interface PortfolioReturnsResponse {

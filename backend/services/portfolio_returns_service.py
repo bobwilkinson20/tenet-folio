@@ -40,6 +40,7 @@ class ScopeReturns:
     scope_id: str  # "portfolio" or account UUID
     scope_name: str
     periods: list[ReturnResult] = field(default_factory=list)
+    chained_from: list[str] = field(default_factory=list)  # predecessor account names
 
 
 @dataclass
@@ -126,14 +127,17 @@ class PortfolioReturnsService:
     def get_account_returns(
         self, db: Session, account_id: str, periods: list[str],
     ) -> ScopeReturns:
-        """Compute returns for a single account (no filtering)."""
+        """Compute returns for a single account, including predecessor history."""
         account = db.query(Account).filter(Account.id == account_id).first()
         name = account.name if account else "Unknown"
-        return self._compute_scope_returns(
+        chain_ids, predecessor_names = self._resolve_account_chain(db, account_id)
+        result = self._compute_scope_returns(
             db, periods,
             scope_id=account_id, scope_name=name,
-            account_ids=[account_id],
+            account_ids=chain_ids,
         )
+        result.chained_from = predecessor_names
+        return result
 
     def get_all_account_returns(
         self,
@@ -152,18 +156,69 @@ class PortfolioReturnsService:
         query = db.query(Account)
         if not include_inactive:
             query = query.filter(Account.is_active.is_(True))
+        # Exclude superseded accounts — their history is folded into the successor
+        query = query.filter(Account.superseded_by_account_id.is_(None))
         if account_ids is not None:
             query = query.filter(Account.id.in_(account_ids))
         accounts = query.order_by(Account.name).all()
 
         results = []
         for acc in accounts:
-            results.append(self.get_account_returns(db, acc.id, periods))
+            scope = self.get_account_returns(db, acc.id, periods)
+            # Skip accounts with no meaningful valuation data across any period.
+            # An account with only $0 DHV rows (e.g. zero-balance sentinel) is
+            # treated as having no data — both start and end are zero.
+            has_data = any(
+                p.has_sufficient_data and (p.start_value or p.end_value)
+                for p in scope.periods
+            )
+            if has_data:
+                results.append(scope)
         return results
 
     # ------------------------------------------------------------------
     # Private
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_account_chain(
+        db: Session, account_id: str,
+    ) -> tuple[list[str], list[str]]:
+        """Walk backward through superseded_by_account_id links.
+
+        Assumes 1-to-1 supersession (one predecessor per account).
+        If multiple accounts point to the same successor (fan-in /
+        consolidation), only the first predecessor found is included.
+
+        Returns:
+            (all_ids, predecessor_names) — IDs ordered oldest-first,
+            names excluding the requested account.
+        """
+        chain_ids: list[str] = []
+        predecessor_names: list[str] = []
+        seen: set[str] = set()
+        current_id = account_id
+
+        while current_id and current_id not in seen:
+            seen.add(current_id)
+            # Find the account that was superseded by current_id
+            predecessor = (
+                db.query(Account)
+                .filter(Account.superseded_by_account_id == current_id)
+                .first()
+            )
+            if predecessor:
+                chain_ids.append(predecessor.id)
+                predecessor_names.append(predecessor.name)
+                current_id = predecessor.id
+            else:
+                break
+
+        chain_ids.reverse()
+        predecessor_names.reverse()
+        if account_id not in chain_ids:
+            chain_ids.append(account_id)
+        return chain_ids, predecessor_names
 
     def _compute_scope_returns(
         self,

@@ -603,6 +603,7 @@ def _create_two_accounts_with_dhv(db):
 
     today = date.today()
     yesterday = today - timedelta(days=1)
+    day_before = today - timedelta(days=2)
 
     acc_a = Account(
         provider_name="SnapTrade", external_id="filter_a",
@@ -637,6 +638,20 @@ def _create_two_accounts_with_dhv(db):
     sec_vti = Security(ticker="VTI", name="Vanguard Total")
     db.add_all([sec_aapl, sec_vti])
     db.flush()
+
+    # DHV for day_before_yesterday (needed for 1D period start)
+    db.add(DailyHoldingValue(
+        valuation_date=day_before, account_id=acc_a.id,
+        account_snapshot_id=snap_a.id, security_id=sec_aapl.id,
+        ticker="AAPL", quantity=Decimal("50"),
+        close_price=Decimal("100"), market_value=Decimal("5000"),
+    ))
+    db.add(DailyHoldingValue(
+        valuation_date=day_before, account_id=acc_b.id,
+        account_snapshot_id=snap_b.id, security_id=sec_vti.id,
+        ticker="VTI", quantity=Decimal("30"),
+        close_price=Decimal("100"), market_value=Decimal("3000"),
+    ))
 
     # DHV for yesterday for both accounts
     db.add(DailyHoldingValue(
