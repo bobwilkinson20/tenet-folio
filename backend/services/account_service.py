@@ -146,8 +146,8 @@ class AccountService:
         db.refresh(account)
         logger.info(
             "Deactivated account %s (%s), closing_snapshot=%s, superseded_by=%s",
-            account.id,
             account.name,
+            account.id,
             create_closing_snapshot,
             superseded_by_account_id,
         )

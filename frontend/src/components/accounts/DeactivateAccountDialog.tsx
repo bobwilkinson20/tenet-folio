@@ -67,7 +67,7 @@ export function DeactivateAccountDialog({
         <p className="text-sm text-tf-text-secondary">
           Deactivating{" "}
           <span className="font-medium">{account.name}</span> will stop syncing
-          it and remove it from all portfolio calculations. Historical data is
+          it and exclude it from current allocation. Historical data is
           preserved.
         </p>
         {account.institution_name && (
