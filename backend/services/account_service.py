@@ -1,13 +1,14 @@
 """Account management service."""
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
 from models import Account, AccountSnapshot, DailyHoldingValue, Security, SyncSession
 from services.portfolio_valuation_service import PortfolioValuationService
+from utils.ticker import ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)
 
@@ -89,13 +90,12 @@ class AccountService:
             )
             return account
 
-        today = date.today()
         now = datetime.now(timezone.utc)
+        today = now.date()
 
         if create_closing_snapshot:
             # Check whether the account already has a zero-balance DHV for today
             # to avoid a duplicate sentinel.
-            from utils.ticker import ZERO_BALANCE_TICKER
             already_zero = (
                 db.query(DailyHoldingValue)
                 .join(Security, DailyHoldingValue.security_id == Security.id)
@@ -145,9 +145,10 @@ class AccountService:
         db.commit()
         db.refresh(account)
         logger.info(
-            "Deactivated account %s (%s)%s",
+            "Deactivated account %s (%s), closing_snapshot=%s, superseded_by=%s",
+            account.id,
             account.name,
-            account_id,
-            f", superseded by {superseded_by_account_id}" if superseded_by_account_id else "",
+            create_closing_snapshot,
+            superseded_by_account_id,
         )
         return account

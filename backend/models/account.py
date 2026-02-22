@@ -61,5 +61,5 @@ class Account(Base):
         "Account",
         foreign_keys=[superseded_by_account_id],
         backref=backref("supersedes", uselist=False),
-        remote_side="Account.id",
+        remote_side=[id],
     )

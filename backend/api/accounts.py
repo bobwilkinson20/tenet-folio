@@ -429,6 +429,10 @@ def deactivate_account(
             raise HTTPException(
                 status_code=400, detail="An account cannot supersede itself"
             )
+        if not replacement.is_active:
+            raise HTTPException(
+                status_code=400, detail="Replacement account must be active"
+            )
 
     result = AccountService.deactivate_account(
         db,

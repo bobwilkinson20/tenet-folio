@@ -35,5 +35,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('accounts', 'superseded_by_account_id')
-    op.drop_column('accounts', 'deactivated_at')
+    from sqlalchemy import inspect as sa_inspect
+    conn = op.get_bind()
+    existing = [c['name'] for c in sa_inspect(conn).get_columns('accounts')]
+    if 'superseded_by_account_id' in existing:
+        op.drop_column('accounts', 'superseded_by_account_id')
+    if 'deactivated_at' in existing:
+        op.drop_column('accounts', 'deactivated_at')

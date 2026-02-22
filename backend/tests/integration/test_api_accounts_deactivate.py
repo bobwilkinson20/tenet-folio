@@ -111,6 +111,22 @@ def test_deactivate_with_invalid_superseded_by_returns_400(client, account):
     assert "replacement account not found" in response.json()["detail"].lower()
 
 
+def test_deactivate_with_inactive_superseded_by_returns_400(client, db):
+    """POST /deactivate with an inactive replacement account returns 400."""
+    old = _make_account(db, provider="SimpleFIN", external_id="sf_1")
+    inactive = _make_account(db, provider="Plaid", external_id="plaid_1", is_active=False)
+
+    response = client.post(
+        f"/api/accounts/{old.id}/deactivate",
+        json={
+            "create_closing_snapshot": False,
+            "superseded_by_account_id": inactive.id,
+        },
+    )
+    assert response.status_code == 400
+    assert "replacement account must be active" in response.json()["detail"].lower()
+
+
 def test_deactivate_self_supersede_returns_400(client, account):
     """POST /deactivate with superseded_by pointing to itself returns 400."""
     response = client.post(

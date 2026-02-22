@@ -1,6 +1,6 @@
 """Unit tests for AccountService.deactivate_account."""
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from models import Account, AccountSnapshot, DailyHoldingValue, Security, SyncSession
@@ -128,7 +128,7 @@ def test_deactivate_with_closing_snapshot_writes_zero_balance_dhv(db):
     assert len(dhv_rows) == 1
     assert dhv_rows[0].ticker == ZERO_BALANCE_TICKER
     assert dhv_rows[0].market_value == Decimal("0")
-    assert dhv_rows[0].valuation_date == date.today()
+    assert dhv_rows[0].valuation_date == datetime.now(timezone.utc).date()
 
 
 def test_deactivate_with_closing_snapshot_skips_if_zero_already(db):
@@ -150,7 +150,7 @@ def test_deactivate_with_closing_snapshot_skips_if_zero_already(db):
 
     from services.portfolio_valuation_service import PortfolioValuationService
     PortfolioValuationService.write_zero_balance_sentinel(
-        db, account.id, snapshot.id, date.today()
+        db, account.id, snapshot.id, datetime.now(timezone.utc).date()
     )
     db.commit()
 
