@@ -93,7 +93,9 @@ export function AccountsPage() {
   };
 
   const handleDeactivated = (updated: Account) => {
-    updateAccount(updated.id, updated);
+    // Merge: deactivate response lacks value, so preserve existing fields
+    const { value: _keep, ...deactivateFields } = updated;
+    updateAccount(updated.id, deactivateFields);
   };
 
   const handleDelete = (account: Account) => {
