@@ -307,3 +307,67 @@ class TestReturnsAPI:
         assert "end_date" in period
         assert period["start_date"] is not None
         assert period["end_date"] is not None
+
+
+class TestReturnsChaining:
+    """Integration tests for chained account returns via API."""
+
+    def test_chained_account_includes_chained_from(
+        self, client: TestClient, db: Session,
+    ):
+        """API response includes chained_from for chained accounts."""
+        old = _create_account(
+            db, "Old Provider", external_id="chain_old", is_active=False,
+        )
+        new = _create_account(db, "New Provider", external_id="chain_new")
+        old.superseded_by_account_id = new.id
+        db.commit()
+
+        response = client.get(f"/api/portfolio/returns?scope={new.id}&periods=1D")
+        assert response.status_code == 200
+        data = response.json()
+        account = data["accounts"][0]
+        assert account["chained_from"] == ["Old Provider"]
+
+    def test_standalone_account_has_empty_chained_from(
+        self, client: TestClient, db: Session,
+    ):
+        """API response has empty chained_from for standalone accounts."""
+        acc = _create_account(db, "Standalone", external_id="standalone_1")
+        db.commit()
+
+        response = client.get(f"/api/portfolio/returns?scope={acc.id}&periods=1D")
+        assert response.status_code == 200
+        data = response.json()
+        account = data["accounts"][0]
+        assert account["chained_from"] == []
+
+    def test_superseded_accounts_excluded_from_all_scope(
+        self, client: TestClient, db: Session,
+    ):
+        """Superseded accounts do not appear in scope=all per-account list."""
+        today = date.today()
+        start = today - timedelta(days=5)
+
+        old = _create_account(
+            db, "Superseded Acct", external_id="sup_api", is_active=False,
+        )
+        new = _create_account(db, "Active Acct", external_id="act_api")
+        old.superseded_by_account_id = new.id
+        ss = _create_sync_session(db)
+        snap_old = _create_snapshot(db, old, ss, Decimal("5000"))
+        _populate_daily_values(
+            db, old, snap_old, start, today, "SPY", Decimal("5000"),
+        )
+        snap_new = _create_snapshot(db, new, ss, Decimal("5000"))
+        _populate_daily_values(
+            db, new, snap_new, start, today, "SPY", Decimal("5000"),
+        )
+        db.commit()
+
+        response = client.get("/api/portfolio/returns?periods=1D&include_inactive=true")
+        assert response.status_code == 200
+        data = response.json()
+        account_names = [a["scope_name"] for a in data["accounts"]]
+        assert "Active Acct" in account_names
+        assert "Superseded Acct" not in account_names

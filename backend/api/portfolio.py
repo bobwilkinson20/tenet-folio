@@ -700,6 +700,7 @@ def get_returns(
                 )
                 for pr in scope_returns.periods
             ],
+            chained_from=scope_returns.chained_from,
         )
 
     logger.info(
