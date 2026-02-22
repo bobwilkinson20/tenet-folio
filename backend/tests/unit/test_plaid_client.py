@@ -426,11 +426,22 @@ class TestMapActivityType:
     def test_deposit(self):
         assert PlaidClient._map_activity_type("cash", "deposit") == "deposit"
 
-    def test_contribution(self):
+    def test_contribution_cash_type(self):
         assert PlaidClient._map_activity_type("cash", "contribution") == "deposit"
+
+    def test_contribution_buy_type(self):
+        # Plaid sometimes sends type=buy for 401k plan contributions; subtype wins.
+        assert PlaidClient._map_activity_type("buy", "contribution") == "deposit"
 
     def test_withdrawal(self):
         assert PlaidClient._map_activity_type("cash", "withdrawal") == "withdrawal"
+
+    def test_distribution_cash_type(self):
+        assert PlaidClient._map_activity_type("cash", "distribution") == "withdrawal"
+
+    def test_distribution_sell_type(self):
+        # Same quirk can apply to distributions.
+        assert PlaidClient._map_activity_type("sell", "distribution") == "withdrawal"
 
     def test_transfer(self):
         assert PlaidClient._map_activity_type("transfer", "transfer") == "transfer"

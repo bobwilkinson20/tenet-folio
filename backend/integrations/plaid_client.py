@@ -352,6 +352,21 @@ class PlaidClient:
                 market_value=quantity,
                 currency=currency,
                 name=f"{currency} Cash",
+                raw_data={
+                    "account_id": holding.get("account_id"),
+                    "security_id": holding.get("security_id"),
+                    "quantity": str(holding.get("quantity")),
+                    "institution_price": str(holding.get("institution_price")),
+                    "institution_value": str(holding.get("institution_value")),
+                    "cost_basis": str(holding.get("cost_basis")),
+                    "iso_currency_code": holding.get("iso_currency_code"),
+                    "_security": {
+                        "security_id": security.get("security_id"),
+                        "name": security.get("name"),
+                        "ticker_symbol": security.get("ticker_symbol"),
+                        "type": security.get("type"),
+                    },
+                },
             )
 
         price = self._to_decimal(holding.get("institution_price")) or Decimal("0")
@@ -382,6 +397,23 @@ class PlaidClient:
             currency=currency,
             name=name,
             cost_basis=cost_basis,
+            raw_data={
+                "account_id": holding.get("account_id"),
+                "security_id": holding.get("security_id"),
+                "quantity": str(holding.get("quantity")),
+                "institution_price": str(holding.get("institution_price")),
+                "institution_value": str(holding.get("institution_value")),
+                "cost_basis": str(holding.get("cost_basis")),
+                "iso_currency_code": holding.get("iso_currency_code"),
+                "_security": {
+                    "security_id": security.get("security_id"),
+                    "name": security.get("name"),
+                    "ticker_symbol": security.get("ticker_symbol"),
+                    "type": security.get("type"),
+                    "cusip": security.get("cusip"),
+                    "isin": security.get("isin"),
+                },
+            },
         )
 
     # ------------------------------------------------------------------
@@ -526,11 +558,41 @@ class PlaidClient:
             price=price,
             currency=currency,
             fee=fees,
+            raw_data={
+                "investment_transaction_id": txn.get("investment_transaction_id"),
+                "account_id": txn.get("account_id"),
+                "security_id": txn.get("security_id"),
+                "date": str(txn.get("date")),
+                "name": txn.get("name"),
+                "type": txn.get("type"),
+                "subtype": txn.get("subtype"),
+                "quantity": str(txn.get("quantity")),
+                "amount": str(txn.get("amount")),
+                "price": str(txn.get("price")),
+                "fees": str(txn.get("fees")),
+                "iso_currency_code": txn.get("iso_currency_code"),
+                "_security": {
+                    "security_id": security.get("security_id"),
+                    "name": security.get("name"),
+                    "ticker_symbol": security.get("ticker_symbol"),
+                    "type": security.get("type"),
+                },
+            },
         )
 
     @staticmethod
     def _map_activity_type(txn_type: str, txn_subtype: str) -> str:
-        """Map Plaid transaction type/subtype to our activity type."""
+        """Map Plaid transaction type/subtype to our activity type.
+
+        Subtype takes precedence for contribution and distribution because
+        Plaid sometimes reports these with type "buy"/"sell" rather than
+        "cash" (e.g. 401k plan contributions arrive as type=buy, subtype=contribution).
+        """
+        # Subtype-first for unambiguous cash-flow semantics
+        if txn_subtype in ("contribution", "deposit"):
+            return "deposit"
+        if txn_subtype in ("withdrawal", "distribution"):
+            return "withdrawal"
         if txn_type == "buy":
             return "buy"
         if txn_type == "sell":
@@ -539,10 +601,6 @@ class PlaidClient:
             return "dividend"
         if txn_type == "cash" and txn_subtype == "interest":
             return "interest"
-        if txn_type == "cash" and txn_subtype in ("deposit", "contribution"):
-            return "deposit"
-        if txn_type == "cash" and txn_subtype in ("withdrawal", "distribution"):
-            return "withdrawal"
         if txn_type == "transfer":
             return "transfer"
         if txn_type == "fee":
