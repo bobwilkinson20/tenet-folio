@@ -848,9 +848,18 @@ class TestAllAccountReturns:
 
     def test_defaults_to_active_only(self, db: Session):
         """By default, only active accounts are included."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates("1M", yesterday)
+
         acc1 = _create_account(db, "Account A")
         acc2 = _create_account(db, "Account B")
         acc3 = _create_account(db, "Inactive", is_active=False)
+        ss = _create_sync_session(db)
+        for acc in [acc1, acc2, acc3]:
+            snap = _create_account_snapshot(db, acc, ss)
+            _create_dhv(db, acc, snap, period_start, "SPY", Decimal("1000"))
+            _create_dhv(db, acc, snap, period_end, "SPY", Decimal("1000"))
         db.flush()
 
         service = PortfolioReturnsService()
@@ -863,8 +872,17 @@ class TestAllAccountReturns:
 
     def test_include_inactive(self, db: Session):
         """With include_inactive=True, inactive accounts appear too."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates("1M", yesterday)
+
         acc1 = _create_account(db, "Active")
         acc2 = _create_account(db, "Inactive", is_active=False)
+        ss = _create_sync_session(db)
+        for acc in [acc1, acc2]:
+            snap = _create_account_snapshot(db, acc, ss)
+            _create_dhv(db, acc, snap, period_start, "SPY", Decimal("1000"))
+            _create_dhv(db, acc, snap, period_end, "SPY", Decimal("1000"))
         db.flush()
 
         service = PortfolioReturnsService()
@@ -876,18 +894,38 @@ class TestAllAccountReturns:
         assert acc1.id in scope_ids
         assert acc2.id in scope_ids
 
-    def test_empty_accounts(self, db: Session):
-        """Accounts with no DHV data still appear with insufficient data."""
+    def test_empty_accounts_excluded(self, db: Session):
+        """Accounts with no DHV data are excluded from the per-account list."""
         _create_account(db, "Empty Account")
         db.flush()
 
         service = PortfolioReturnsService()
         results = service.get_all_account_returns(db, periods=["1M"])
 
-        assert len(results) >= 1
-        for r in results:
-            for p in r.periods:
-                assert p.has_sufficient_data is False
+        scope_names = {r.scope_name for r in results}
+        assert "Empty Account" not in scope_names
+
+    def test_zero_balance_only_accounts_excluded(self, db: Session):
+        """Accounts with only $0 DHV rows (zero-balance sentinel) are excluded."""
+        acc = _create_account(db, "Zero Balance Account")
+        ss = _create_sync_session(db)
+        snap = _create_account_snapshot(db, acc, ss)
+
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1D", yesterday,
+        )
+
+        _create_dhv(db, acc, snap, period_start, ZERO_BALANCE_TICKER, Decimal("0"))
+        _create_dhv(db, acc, snap, period_end, ZERO_BALANCE_TICKER, Decimal("0"))
+        db.flush()
+
+        service = PortfolioReturnsService()
+        results = service.get_all_account_returns(db, periods=["1D"])
+
+        scope_names = {r.scope_name for r in results}
+        assert "Zero Balance Account" not in scope_names
 
 
 # ---------------------------------------------------------------------------
@@ -913,7 +951,7 @@ class TestGetReturns:
         db.flush()
 
         service = PortfolioReturnsService()
-        result = service.get_returns(db, scope="all", periods=["1M"])
+        result = service.get_returns(db, scope="all", periods=["1D"])
 
         assert result.portfolio is not None
         assert result.portfolio.scope_id == "portfolio"
@@ -1473,9 +1511,21 @@ class TestChainedAccountReturns:
 
     def test_superseded_accounts_excluded_from_all_account_returns(self, db: Session):
         """get_all_account_returns should not include superseded accounts."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates("1M", yesterday)
+
         old = _create_account(db, "Old Acct", external_id="old_1", is_active=False)
         new = _create_account(db, "New Acct", external_id="new_1")
         old.superseded_by_account_id = new.id
+        ss = _create_sync_session(db)
+        # Give old account DHV so it would appear if not superseded
+        snap_old = _create_account_snapshot(db, old, ss)
+        _create_dhv(db, old, snap_old, period_start, "SPY", Decimal("1000"))
+        _create_dhv(db, old, snap_old, period_end, "SPY", Decimal("1000"))
+        # New account gets DHV via chain from old
+        snap_new = _create_account_snapshot(db, new, ss)
+        _create_dhv(db, new, snap_new, period_end, "SPY", Decimal("1000"))
         db.flush()
 
         service = PortfolioReturnsService()
@@ -1487,12 +1537,21 @@ class TestChainedAccountReturns:
 
     def test_non_superseded_inactive_still_appears_with_include_inactive(self, db: Session):
         """Inactive accounts that are NOT superseded still appear with include_inactive=True."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates("1M", yesterday)
+
         active = _create_account(db, "Active Acct", external_id="active_1")
         inactive_not_superseded = _create_account(
             db, "Manually Deactivated",
             external_id="manual_deact",
             is_active=False,
         )
+        ss = _create_sync_session(db)
+        for acc in [active, inactive_not_superseded]:
+            snap = _create_account_snapshot(db, acc, ss)
+            _create_dhv(db, acc, snap, period_start, "SPY", Decimal("1000"))
+            _create_dhv(db, acc, snap, period_end, "SPY", Decimal("1000"))
         db.flush()
 
         service = PortfolioReturnsService()
@@ -1506,9 +1565,19 @@ class TestChainedAccountReturns:
 
     def test_superseded_excluded_even_with_include_inactive(self, db: Session):
         """Superseded accounts are excluded even with include_inactive=True."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates("1M", yesterday)
+
         old = _create_account(db, "Superseded", external_id="sup_1", is_active=False)
         new = _create_account(db, "Successor", external_id="suc_1")
         old.superseded_by_account_id = new.id
+        ss = _create_sync_session(db)
+        snap_old = _create_account_snapshot(db, old, ss)
+        _create_dhv(db, old, snap_old, period_start, "SPY", Decimal("1000"))
+        _create_dhv(db, old, snap_old, period_end, "SPY", Decimal("1000"))
+        snap_new = _create_account_snapshot(db, new, ss)
+        _create_dhv(db, new, snap_new, period_end, "SPY", Decimal("1000"))
         db.flush()
 
         service = PortfolioReturnsService()

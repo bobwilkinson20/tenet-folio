@@ -346,11 +346,23 @@ class TestReturnsChaining:
         self, client: TestClient, db: Session,
     ):
         """Superseded accounts do not appear in scope=all per-account list."""
+        today = date.today()
+        start = today - timedelta(days=5)
+
         old = _create_account(
             db, "Superseded Acct", external_id="sup_api", is_active=False,
         )
         new = _create_account(db, "Active Acct", external_id="act_api")
         old.superseded_by_account_id = new.id
+        ss = _create_sync_session(db)
+        snap_old = _create_snapshot(db, old, ss, Decimal("5000"))
+        _populate_daily_values(
+            db, old, snap_old, start, today, "SPY", Decimal("5000"),
+        )
+        snap_new = _create_snapshot(db, new, ss, Decimal("5000"))
+        _populate_daily_values(
+            db, new, snap_new, start, today, "SPY", Decimal("5000"),
+        )
         db.commit()
 
         response = client.get("/api/portfolio/returns?periods=1D&include_inactive=true")

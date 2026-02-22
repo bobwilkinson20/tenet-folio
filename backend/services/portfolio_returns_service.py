@@ -164,7 +164,16 @@ class PortfolioReturnsService:
 
         results = []
         for acc in accounts:
-            results.append(self.get_account_returns(db, acc.id, periods))
+            scope = self.get_account_returns(db, acc.id, periods)
+            # Skip accounts with no meaningful valuation data across any period.
+            # An account with only $0 DHV rows (e.g. zero-balance sentinel) is
+            # treated as having no data — both start and end are zero.
+            has_data = any(
+                p.has_sufficient_data and (p.start_value or p.end_value)
+                for p in scope.periods
+            )
+            if has_data:
+                results.append(scope)
         return results
 
     # ------------------------------------------------------------------
