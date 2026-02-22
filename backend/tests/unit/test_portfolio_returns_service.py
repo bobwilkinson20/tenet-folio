@@ -1428,11 +1428,13 @@ class TestAccountChainResolution:
         acc_b.superseded_by_account_id = acc_a.id
         db.flush()
 
-        # Should terminate without error and produce no duplicate IDs
+        # Should terminate without error, no duplicate IDs, and the resolved
+        # account should not appear in its own predecessor names
         chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_b.id)
         assert acc_b.id in chain_ids
         assert acc_a.id in chain_ids
         assert len(chain_ids) == len(set(chain_ids))
+        assert "Loop B" not in names
 
 
 # ---------------------------------------------------------------------------

@@ -188,7 +188,7 @@ class PortfolioReturnsService:
 
         Assumes 1-to-1 supersession (one predecessor per account).
         If multiple accounts point to the same successor (fan-in /
-        consolidation), only the first predecessor found is included.
+        consolidation), the oldest predecessor (by created_at) is used.
 
         Returns:
             (all_ids, predecessor_names) — IDs ordered oldest-first,
@@ -205,9 +205,10 @@ class PortfolioReturnsService:
             predecessor = (
                 db.query(Account)
                 .filter(Account.superseded_by_account_id == current_id)
+                .order_by(Account.created_at)
                 .first()
             )
-            if predecessor:
+            if predecessor and predecessor.id != account_id:
                 chain_ids.append(predecessor.id)
                 predecessor_names.append(predecessor.name)
                 current_id = predecessor.id
