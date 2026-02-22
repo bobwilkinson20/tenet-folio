@@ -68,8 +68,9 @@ class PortfolioReturnsService:
             scope: "all" (portfolio + accounts), "portfolio", or an account UUID.
             periods: List of period strings. Defaults to DEFAULT_PERIODS.
             include_inactive: If True, include inactive accounts in the
-                all-accounts list. Portfolio-level always excludes inactive
-                and include_in_allocation=False accounts regardless.
+                per-account list. Portfolio-level always includes inactive
+                allocation accounts (their historical DHV is needed for
+                accurate returns across provider transitions).
             account_ids: If provided, restrict portfolio-level returns to
                 these account IDs (intersected with allocation accounts).
         """
