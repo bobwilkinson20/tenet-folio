@@ -132,6 +132,11 @@ def _get_account_ids_for_filter(
     """
     if not allocation_only and account_ids is None and include_inactive:
         return None  # No filter needed — all accounts, all history
+
+    # When include_inactive=False (default), we query active account IDs
+    # explicitly rather than returning None. This means callers get a
+    # WHERE account_id IN (...) clause instead of no filter. Functionally
+    # equivalent when active accounts exist; returns no rows if none do.
     query = db.query(Account.id)
     if not include_inactive:
         query = query.filter(Account.is_active.is_(True))
