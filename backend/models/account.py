@@ -61,10 +61,4 @@ class Account(Base):
         "Account",
         foreign_keys=[superseded_by_account_id],
         remote_side=[id],
-        back_populates="supersedes",
-    )
-    supersedes = relationship(
-        "Account",
-        foreign_keys=[superseded_by_account_id],
-        back_populates="superseded_by",
     )
