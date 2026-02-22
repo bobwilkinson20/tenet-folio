@@ -28,7 +28,7 @@ export function DeactivateAccountDialog({
 
   const hasValue = account.value && parseFloat(account.value) > 0;
 
-  // Candidate replacement accounts: active, different provider, not this account
+  // Candidate replacement accounts: active and not this account
   const replacementCandidates = allAccounts.filter(
     (a) => a.is_active && a.id !== account.id
   );
@@ -38,7 +38,7 @@ export function DeactivateAccountDialog({
       setSubmitting(true);
       setError(null);
       const response = await accountsApi.deactivate(account.id, {
-        create_closing_snapshot: createClosingSnapshot,
+        create_closing_snapshot: hasValue ? createClosingSnapshot : false,
         superseded_by_account_id: supersededById || null,
       });
       onDeactivated(response.data);

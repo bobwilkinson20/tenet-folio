@@ -390,6 +390,14 @@ def update_account(
     """Update an account."""
     account = get_or_404(db, Account, account_id, "Account not found")
     update_dict = account_data.model_dump(exclude_unset=True)
+
+    # Deactivation must go through POST /deactivate for closing-snapshot logic
+    if update_dict.get("is_active") is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Use POST /accounts/{id}/deactivate to deactivate an account",
+        )
+
     for key, value in update_dict.items():
         setattr(account, key, value)
 
@@ -441,7 +449,7 @@ def deactivate_account(
 
     result = AccountService.deactivate_account(
         db,
-        account_id,
+        account,
         create_closing_snapshot=body.create_closing_snapshot,
         superseded_by_account_id=body.superseded_by_account_id,
     )

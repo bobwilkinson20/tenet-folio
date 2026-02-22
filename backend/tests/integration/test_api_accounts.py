@@ -187,13 +187,12 @@ def test_create_account(client: object, asset_class):
     assert data["is_active"] is True
 
 
-def test_update_account_active_status(client: object, account):
-    """Test updating account active status."""
+def test_patch_is_active_false_rejected(client: object, account):
+    """PATCH is_active=false is rejected; must use POST /deactivate."""
     update_data = {"is_active": False}
     response = client.patch(f"/api/accounts/{account.id}", json=update_data)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["is_active"] is False
+    assert response.status_code == 400
+    assert "deactivate" in response.json()["detail"].lower()
 
 
 def test_get_account_holdings(client: object, account, holding, db):

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from models import Account, AccountSnapshot, DailyHoldingValue, Security, SyncSession
 from services.account_service import AccountService
+from services.portfolio_valuation_service import PortfolioValuationService
 from utils.ticker import ZERO_BALANCE_TICKER
 
 
@@ -47,7 +48,7 @@ def _make_dhv(db, account_id, snapshot_id, ticker, valuation_date, market_value)
 def test_deactivate_sets_is_active_false(db):
     """Deactivating an account sets is_active=False."""
     account = _make_account(db)
-    result = AccountService.deactivate_account(db, account.id, create_closing_snapshot=False)
+    result = AccountService.deactivate_account(db, account, create_closing_snapshot=False)
     assert result is not None
     assert result.is_active is False
 
@@ -56,7 +57,7 @@ def test_deactivate_sets_deactivated_at(db):
     """Deactivating an account sets deactivated_at to approximately now."""
     account = _make_account(db)
     before = datetime.now(timezone.utc)
-    result = AccountService.deactivate_account(db, account.id, create_closing_snapshot=False)
+    result = AccountService.deactivate_account(db, account, create_closing_snapshot=False)
     after = datetime.now(timezone.utc)
 
     assert result.deactivated_at is not None
@@ -65,16 +66,10 @@ def test_deactivate_sets_deactivated_at(db):
     assert before <= dt <= after
 
 
-def test_deactivate_returns_none_for_missing_account(db):
-    """Deactivating a non-existent account returns None."""
-    result = AccountService.deactivate_account(db, "nonexistent-id", create_closing_snapshot=False)
-    assert result is None
-
-
 def test_deactivate_already_inactive_is_noop(db):
     """Deactivating an already-inactive account is a no-op (returns account)."""
     account = _make_account(db, is_active=False)
-    result = AccountService.deactivate_account(db, account.id, create_closing_snapshot=True)
+    result = AccountService.deactivate_account(db, account, create_closing_snapshot=True)
     assert result is not None
     assert result.is_active is False
     # No new sync session or snapshot should have been created
@@ -88,7 +83,7 @@ def test_deactivate_sets_superseded_by(db):
     new = _make_account(db, provider="Plaid", external_id="plaid_1")
 
     result = AccountService.deactivate_account(
-        db, old.id,
+        db, old,
         create_closing_snapshot=False,
         superseded_by_account_id=new.id,
     )
@@ -98,7 +93,7 @@ def test_deactivate_sets_superseded_by(db):
 def test_deactivate_with_closing_snapshot_creates_sync_session(db):
     """When create_closing_snapshot=True, a new SyncSession is created."""
     account = _make_account(db)
-    AccountService.deactivate_account(db, account.id, create_closing_snapshot=True)
+    AccountService.deactivate_account(db, account, create_closing_snapshot=True)
 
     sessions = db.query(SyncSession).all()
     assert len(sessions) == 1
@@ -108,7 +103,7 @@ def test_deactivate_with_closing_snapshot_creates_sync_session(db):
 def test_deactivate_with_closing_snapshot_creates_account_snapshot(db):
     """Closing snapshot creates an AccountSnapshot with zero value and no holdings."""
     account = _make_account(db)
-    AccountService.deactivate_account(db, account.id, create_closing_snapshot=True)
+    AccountService.deactivate_account(db, account, create_closing_snapshot=True)
 
     snapshots = db.query(AccountSnapshot).filter_by(account_id=account.id).all()
     assert len(snapshots) == 1
@@ -119,7 +114,7 @@ def test_deactivate_with_closing_snapshot_creates_account_snapshot(db):
 def test_deactivate_with_closing_snapshot_writes_zero_balance_dhv(db):
     """Closing snapshot writes a _ZERO_BALANCE DHV row for today."""
     account = _make_account(db)
-    AccountService.deactivate_account(db, account.id, create_closing_snapshot=True)
+    AccountService.deactivate_account(db, account, create_closing_snapshot=True)
 
     sentinel_security = db.query(Security).filter_by(ticker=ZERO_BALANCE_TICKER).first()
     assert sentinel_security is not None
@@ -148,13 +143,12 @@ def test_deactivate_with_closing_snapshot_skips_if_zero_already(db):
     db.add(snapshot)
     db.flush()
 
-    from services.portfolio_valuation_service import PortfolioValuationService
     PortfolioValuationService.write_zero_balance_sentinel(
         db, account.id, snapshot.id, datetime.now(timezone.utc).date()
     )
     db.commit()
 
-    AccountService.deactivate_account(db, account.id, create_closing_snapshot=True)
+    AccountService.deactivate_account(db, account, create_closing_snapshot=True)
 
     # Still only one sync session (the pre-existing one, not a new one)
     sessions = db.query(SyncSession).all()
@@ -168,7 +162,7 @@ def test_deactivate_with_closing_snapshot_skips_if_zero_already(db):
 def test_deactivate_no_closing_snapshot_skips_session(db):
     """When create_closing_snapshot=False, no SyncSession or DHV is created."""
     account = _make_account(db)
-    AccountService.deactivate_account(db, account.id, create_closing_snapshot=False)
+    AccountService.deactivate_account(db, account, create_closing_snapshot=False)
 
     assert db.query(SyncSession).count() == 0
     assert db.query(DailyHoldingValue).count() == 0

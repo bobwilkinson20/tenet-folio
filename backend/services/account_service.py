@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from models import Account, AccountSnapshot, DailyHoldingValue, Security, SyncSession
+from models import Account, AccountSnapshot, DailyHoldingValue, SyncSession
 from services.portfolio_valuation_service import PortfolioValuationService
 from utils.ticker import ZERO_BALANCE_TICKER
 
@@ -56,11 +56,11 @@ class AccountService:
     @staticmethod
     def deactivate_account(
         db: Session,
-        account_id: str,
+        account: Account,
         *,
         create_closing_snapshot: bool = True,
         superseded_by_account_id: str | None = None,
-    ) -> Account | None:
+    ) -> Account:
         """Deactivate an account, optionally recording a closing $0 snapshot.
 
         The closing snapshot writes a zero-balance DailyHoldingValue for today
@@ -72,21 +72,18 @@ class AccountService:
 
         Args:
             db: Database session
-            account_id: ID of the account to deactivate
+            account: The Account instance to deactivate
             create_closing_snapshot: If True, write a $0 closing snapshot
             superseded_by_account_id: Optional ID of the replacement account
 
         Returns:
-            Updated Account, or None if not found
+            Updated Account
         """
-        account = db.query(Account).filter(Account.id == account_id).first()
-        if not account:
-            return None
 
         if not account.is_active:
             logger.info(
                 "Account %s (%s) is already inactive, skipping deactivation",
-                account.name, account_id,
+                account.name, account.id,
             )
             return account
 
@@ -95,14 +92,14 @@ class AccountService:
 
         if create_closing_snapshot:
             # Check whether the account already has a zero-balance DHV for today
-            # to avoid a duplicate sentinel.
+            # to avoid a duplicate sentinel. Uses denormalized ticker column
+            # on DHV directly — no join needed.
             already_zero = (
                 db.query(DailyHoldingValue)
-                .join(Security, DailyHoldingValue.security_id == Security.id)
                 .filter(
-                    DailyHoldingValue.account_id == account_id,
+                    DailyHoldingValue.account_id == account.id,
                     DailyHoldingValue.valuation_date == today,
-                    Security.ticker == ZERO_BALANCE_TICKER,
+                    DailyHoldingValue.ticker == ZERO_BALANCE_TICKER,
                 )
                 .first()
             )
@@ -118,7 +115,7 @@ class AccountService:
 
                 # Create the $0 AccountSnapshot (no Holding children)
                 closing_snapshot = AccountSnapshot(
-                    account_id=account_id,
+                    account_id=account.id,
                     sync_session_id=closing_session.id,
                     status="success",
                     total_value=Decimal("0"),
@@ -129,12 +126,12 @@ class AccountService:
 
                 # Write the zero-balance sentinel DHV for today
                 PortfolioValuationService.write_zero_balance_sentinel(
-                    db, account_id, closing_snapshot.id, today
+                    db, account.id, closing_snapshot.id, today
                 )
 
                 logger.info(
                     "Created closing snapshot for account %s (%s)",
-                    account.name, account_id,
+                    account.name, account.id,
                 )
 
         account.is_active = False
