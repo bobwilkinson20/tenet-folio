@@ -94,7 +94,8 @@ export function AccountsPage() {
 
   const handleDeactivated = (updated: Account) => {
     // Merge: deactivate response lacks value, so preserve existing fields
-    const { value: _keep, ...deactivateFields } = updated;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { value, ...deactivateFields } = updated;
     updateAccount(updated.id, deactivateFields);
   };
 
