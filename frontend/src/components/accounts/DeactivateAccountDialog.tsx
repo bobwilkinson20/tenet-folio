@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { accountsApi } from "@/api/accounts";
 import type { Account } from "@/types";
 import { extractApiErrorMessage } from "@/utils/errors";
@@ -23,6 +23,12 @@ export function DeactivateAccountDialog({
   const [supersededById, setSupersededById] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCreateClosingSnapshot(true);
+    setSupersededById("");
+    setError(null);
+  }, [account?.id]);
 
   if (!account) return null;
 
