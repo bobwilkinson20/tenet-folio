@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 
 from database import Base
 from models.utils import generate_uuid
@@ -60,6 +60,12 @@ class Account(Base):
     superseded_by = relationship(
         "Account",
         foreign_keys=[superseded_by_account_id],
-        backref=backref("supersedes", uselist=False),
         remote_side=[id],
+        back_populates="supersedes",
+    )
+    supersedes = relationship(
+        "Account",
+        foreign_keys=[superseded_by_account_id],
+        uselist=False,
+        back_populates="superseded_by",
     )
