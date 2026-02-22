@@ -1328,3 +1328,205 @@ class TestProviderTransitionReturns:
 
         # No allocation accounts → no data
         assert ret.has_sufficient_data is False
+
+
+# ---------------------------------------------------------------------------
+# TestAccountChainResolution
+# ---------------------------------------------------------------------------
+class TestAccountChainResolution:
+    """Test _resolve_account_chain walks backward through superseded_by links."""
+
+    def test_no_chain_returns_single_id(self, db: Session):
+        """Account with no predecessors returns just its own ID."""
+        acc = _create_account(db, "Standalone")
+        db.flush()
+
+        chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc.id)
+        assert chain_ids == [acc.id]
+        assert names == []
+
+    def test_single_predecessor(self, db: Session):
+        """A → B: resolving B returns [A, B] with A's name."""
+        acc_a = _create_account(db, "Old SimpleFIN", external_id="sf_1")
+        acc_b = _create_account(db, "New Plaid", external_id="plaid_1")
+        acc_a.superseded_by_account_id = acc_b.id
+        db.flush()
+
+        chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_b.id)
+        assert chain_ids == [acc_a.id, acc_b.id]
+        assert names == ["Old SimpleFIN"]
+
+    def test_three_account_chain(self, db: Session):
+        """A → B → C: resolving C returns [A, B, C] with names [A, B]."""
+        acc_a = _create_account(db, "Provider A", external_id="a_1")
+        acc_b = _create_account(db, "Provider B", external_id="b_1")
+        acc_c = _create_account(db, "Provider C", external_id="c_1")
+        acc_a.superseded_by_account_id = acc_b.id
+        acc_b.superseded_by_account_id = acc_c.id
+        db.flush()
+
+        chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_c.id)
+        assert chain_ids == [acc_a.id, acc_b.id, acc_c.id]
+        assert names == ["Provider A", "Provider B"]
+
+    def test_resolve_from_middle_finds_only_predecessors(self, db: Session):
+        """Resolving from B in A → B → C only finds A, not C."""
+        acc_a = _create_account(db, "Provider A", external_id="a_1")
+        acc_b = _create_account(db, "Provider B", external_id="b_1")
+        acc_c = _create_account(db, "Provider C", external_id="c_1")
+        acc_a.superseded_by_account_id = acc_b.id
+        acc_b.superseded_by_account_id = acc_c.id
+        db.flush()
+
+        chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_b.id)
+        assert chain_ids == [acc_a.id, acc_b.id]
+        assert names == ["Provider A"]
+
+    def test_circular_chain_terminates(self, db: Session):
+        """Circular superseded_by links should not cause infinite loop."""
+        acc_a = _create_account(db, "Loop A", external_id="loop_a")
+        acc_b = _create_account(db, "Loop B", external_id="loop_b")
+        acc_a.superseded_by_account_id = acc_b.id
+        acc_b.superseded_by_account_id = acc_a.id
+        db.flush()
+
+        # Should terminate without error
+        chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_b.id)
+        assert acc_b.id in chain_ids
+        assert acc_a.id in chain_ids
+
+
+# ---------------------------------------------------------------------------
+# TestChainedAccountReturns
+# ---------------------------------------------------------------------------
+class TestChainedAccountReturns:
+    """Test that chained accounts include predecessor DHV data."""
+
+    def test_active_account_includes_predecessor_history(self, db: Session):
+        """Active account's returns include DHV from superseded predecessor."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+        transition_day = period_start + timedelta(days=15)
+
+        # Old account: has data from period_start to transition_day - 1
+        old = _create_account(
+            db, "SimpleFIN Acct",
+            provider_name="SimpleFIN",
+            external_id="sf_chain",
+            is_active=False,
+        )
+        ss_old = _create_sync_session(db)
+        snap_old = _create_account_snapshot(db, old, ss_old)
+        _populate_daily_values(
+            db, old, snap_old, period_start, transition_day - timedelta(days=1),
+            "VTI", start_value=Decimal("10000"),
+        )
+
+        # New account: has data from transition_day to period_end
+        new = _create_account(
+            db, "Plaid Acct",
+            provider_name="Plaid",
+            external_id="plaid_chain",
+        )
+        ss_new = _create_sync_session(db)
+        snap_new = _create_account_snapshot(db, new, ss_new)
+        _populate_daily_values(
+            db, new, snap_new, transition_day, period_end,
+            "VTI", start_value=Decimal("10000"),
+        )
+
+        old.superseded_by_account_id = new.id
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_account_returns(db, new.id, periods=["1M"])
+
+        assert result.scope_name == "Plaid Acct"
+        assert result.chained_from == ["SimpleFIN Acct"]
+        ret = result.periods[0]
+        # Should have data from the old account at period_start
+        assert ret.has_sufficient_data is True
+        assert ret.start_value == Decimal("10000")
+
+    def test_account_without_chain_has_empty_chained_from(self, db: Session):
+        """Account with no predecessors has empty chained_from."""
+        acc = _create_account(db, "Standalone Acct")
+        ss = _create_sync_session(db)
+        snap = _create_account_snapshot(db, acc, ss)
+
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+
+        _create_dhv(db, acc, snap, period_start, "SPY", Decimal("10000"))
+        _create_dhv(db, acc, snap, period_end, "SPY", Decimal("11000"))
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_account_returns(db, acc.id, periods=["1M"])
+        assert result.chained_from == []
+
+    def test_superseded_accounts_excluded_from_all_account_returns(self, db: Session):
+        """get_all_account_returns should not include superseded accounts."""
+        old = _create_account(db, "Old Acct", external_id="old_1", is_active=False)
+        new = _create_account(db, "New Acct", external_id="new_1")
+        old.superseded_by_account_id = new.id
+        db.flush()
+
+        service = PortfolioReturnsService()
+        results = service.get_all_account_returns(db, periods=["1M"])
+
+        scope_ids = {r.scope_id for r in results}
+        assert new.id in scope_ids
+        assert old.id not in scope_ids
+
+    def test_non_superseded_inactive_still_appears_with_include_inactive(self, db: Session):
+        """Inactive accounts that are NOT superseded still appear with include_inactive=True."""
+        active = _create_account(db, "Active Acct", external_id="active_1")
+        inactive_not_superseded = _create_account(
+            db, "Manually Deactivated",
+            external_id="manual_deact",
+            is_active=False,
+        )
+        db.flush()
+
+        service = PortfolioReturnsService()
+        results = service.get_all_account_returns(
+            db, periods=["1M"], include_inactive=True,
+        )
+
+        scope_ids = {r.scope_id for r in results}
+        assert active.id in scope_ids
+        assert inactive_not_superseded.id in scope_ids
+
+    def test_superseded_excluded_even_with_include_inactive(self, db: Session):
+        """Superseded accounts are excluded even with include_inactive=True."""
+        old = _create_account(db, "Superseded", external_id="sup_1", is_active=False)
+        new = _create_account(db, "Successor", external_id="suc_1")
+        old.superseded_by_account_id = new.id
+        db.flush()
+
+        service = PortfolioReturnsService()
+        results = service.get_all_account_returns(
+            db, periods=["1M"], include_inactive=True,
+        )
+
+        scope_ids = {r.scope_id for r in results}
+        assert new.id in scope_ids
+        assert old.id not in scope_ids
+
+    def test_scope_name_uses_active_account_name(self, db: Session):
+        """Chained returns should use the active account's name, not the predecessor's."""
+        old = _create_account(db, "Old Name", external_id="old_name_1", is_active=False)
+        new = _create_account(db, "Current Name", external_id="new_name_1")
+        old.superseded_by_account_id = new.id
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_account_returns(db, new.id, periods=["1M"])
+        assert result.scope_name == "Current Name"

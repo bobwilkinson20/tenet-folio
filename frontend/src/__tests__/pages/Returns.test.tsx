@@ -163,4 +163,68 @@ describe("ReturnsPage", () => {
     backButton.click();
     expect(mockNavigate).toHaveBeenCalledWith(-1);
   });
+
+  it("shows chain indicator when chained_from is non-empty", async () => {
+    mockGetReturns.mockResolvedValue({
+      data: {
+        portfolio: null,
+        accounts: [
+          {
+            scope_id: "acc-chained",
+            scope_name: "Plaid Account",
+            chained_from: ["Old SimpleFIN"],
+            periods: [
+              makePeriod("1D", "0.01"),
+              makePeriod("1M", "0.05"),
+              makePeriod("QTD", "0.08"),
+              makePeriod("3M", "0.07"),
+              makePeriod("YTD", "0.12"),
+              makePeriod("1Y", "0.18"),
+            ],
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Plaid Account")).toBeInTheDocument();
+    });
+
+    const tooltip = screen.getByTitle("Includes history from: Old SimpleFIN");
+    expect(tooltip).toBeInTheDocument();
+  });
+
+  it("does not show chain indicator when chained_from is empty", async () => {
+    mockGetReturns.mockResolvedValue({
+      data: {
+        portfolio: null,
+        accounts: [
+          {
+            scope_id: "acc-standalone",
+            scope_name: "Standalone Account",
+            chained_from: [],
+            periods: [
+              makePeriod("1D", "0.01"),
+              makePeriod("1M", "0.05"),
+              makePeriod("QTD", "0.08"),
+              makePeriod("3M", "0.07"),
+              makePeriod("YTD", "0.12"),
+              makePeriod("1Y", "0.18"),
+            ],
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Standalone Account")).toBeInTheDocument();
+    });
+
+    const tooltips = screen.queryAllByTitle(/Includes history from/);
+    expect(tooltips).toHaveLength(0);
+  });
 });

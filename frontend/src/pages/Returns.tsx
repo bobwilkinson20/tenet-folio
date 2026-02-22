@@ -137,7 +137,28 @@ export function ReturnsPage() {
                         className="border-b border-tf-border-subtle last:border-b-0 hover:bg-tf-bg-elevated/30"
                       >
                         <td className="px-4 py-3 text-tf-text-primary font-medium">
-                          {account.scope_name}
+                          <span className="inline-flex items-center gap-1.5">
+                            {account.scope_name}
+                            {account.chained_from && account.chained_from.length > 0 && (
+                              <span
+                                title={`Includes history from: ${account.chained_from.join(", ")}`}
+                                className="text-tf-text-tertiary"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                </svg>
+                              </span>
+                            )}
+                          </span>
                         </td>
                         {account.periods.map((period) => (
                           <IrrCell key={period.period} period={period} />
