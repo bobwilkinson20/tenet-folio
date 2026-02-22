@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from models import Account, AccountSnapshot, DailyHoldingValue, SyncSession
 from models.activity import Activity
 from services.portfolio_returns_service import PortfolioReturnsService
+from services.security_service import SecurityService
 from tests.fixtures import get_or_create_security
+from utils.ticker import ZERO_BALANCE_TICKER
 
 
 # ---------------------------------------------------------------------------
@@ -695,10 +697,15 @@ class TestPortfolioReturns:
         assert ret.has_sufficient_data is True
         assert ret.irr is not None
 
-    def test_excludes_inactive_accounts(self, db: Session):
-        """Portfolio returns should not include inactive accounts."""
-        acc_active = _create_account(db, "Active")
-        acc_inactive = _create_account(db, "Inactive", is_active=False)
+    def test_includes_inactive_allocation_accounts(self, db: Session):
+        """Portfolio returns include inactive accounts with include_in_allocation=True.
+
+        Inactive allocation accounts (e.g. a SimpleFIN account superseded by Plaid)
+        still contributed real historical value and must be included so that
+        returns for any period overlapping their history are accurate.
+        """
+        acc_active = _create_account(db, "Active", include_in_allocation=True)
+        acc_inactive = _create_account(db, "Inactive (deactivated)", is_active=False, include_in_allocation=True)
         ss = _create_sync_session(db)
         snap_active = _create_account_snapshot(db, acc_active, ss)
         snap_inactive = _create_account_snapshot(db, acc_inactive, ss)
@@ -709,10 +716,10 @@ class TestPortfolioReturns:
             "1M", yesterday,
         )
 
-        # Active account: 10000 → 11000 (10% gain)
+        # Active account: 10000 → 11000
         _create_dhv(db, acc_active, snap_active, period_start, "SPY", Decimal("10000"))
         _create_dhv(db, acc_active, snap_active, period_end, "SPY", Decimal("11000"))
-        # Inactive account: 5000 → 4000 (20% loss) — should be excluded
+        # Inactive allocation account: 5000 → 4000 — included because include_in_allocation=True
         _create_dhv(db, acc_inactive, snap_inactive, period_start, "BND", Decimal("5000"))
         _create_dhv(db, acc_inactive, snap_inactive, period_end, "BND", Decimal("4000"))
         db.flush()
@@ -722,9 +729,9 @@ class TestPortfolioReturns:
         ret = result.periods[0]
 
         assert ret.has_sufficient_data is True
-        # Should reflect only active account: 10000 → 11000 = +10%
-        assert ret.start_value == Decimal("10000")
-        assert ret.end_value == Decimal("11000")
+        # Both accounts contribute: 15000 → 15000
+        assert ret.start_value == Decimal("15000")
+        assert ret.end_value == Decimal("15000")
 
     def test_excludes_non_allocation_accounts(self, db: Session):
         """Portfolio returns should not include accounts with include_in_allocation=False."""
@@ -1176,4 +1183,148 @@ class TestLiquidatedAccountReturns:
         result = service.get_account_returns(db, acc.id, periods=["1M"])
         ret = result.periods[0]
 
+        assert ret.has_sufficient_data is False
+
+
+# ---------------------------------------------------------------------------
+# TestProviderTransitionReturns — regression for SimpleFIN → Plaid handoff
+# ---------------------------------------------------------------------------
+class TestProviderTransitionReturns:
+    """Portfolio-level returns must include deactivated accounts' history.
+
+    When a user transitions from one sync provider to another (e.g. SimpleFIN
+    → Plaid), the old account is deactivated. Its historical DHV records are
+    real and must remain in portfolio-level returns — otherwise any period
+    spanning the transition date loses its starting basis and shows incorrect
+    (or missing) returns.
+    """
+
+    def test_deactivated_allocation_account_included_in_portfolio_returns(
+        self, db: Session
+    ):
+        """Portfolio returns include inactive allocation accounts' DHV history."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+
+        old = _create_account(
+            db, "SimpleFIN Brokerage",
+            is_active=False,
+            include_in_allocation=True,
+        )
+        ss_old = _create_sync_session(db)
+        snap_old = _create_account_snapshot(db, old, ss_old, total_value=Decimal("10000"))
+        _populate_daily_values(
+            db, old, snap_old, period_start, period_end, "VTI",
+            start_value=Decimal("10000"),
+        )
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_portfolio_returns(db, periods=["1M"])
+        ret = result.periods[0]
+
+        assert ret.has_sufficient_data is True, (
+            "Portfolio returns should have data even when the only allocation "
+            "account is inactive"
+        )
+        assert ret.start_value == Decimal("10000")
+
+    def test_deactivated_account_history_preserved_alongside_new_account(
+        self, db: Session
+    ):
+        """Old (deactivated) account's history + new account's current value
+        both contribute correctly after the provider transition."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+        transition_day = period_start + timedelta(days=15)
+
+        # Old SimpleFIN account: $10k through transition, then $0 closing snapshot
+        old = _create_account(
+            db, "SimpleFIN",
+            provider_name="SimpleFIN",
+            external_id="sf_1",
+            is_active=False,
+            include_in_allocation=True,
+        )
+        ss_old = _create_sync_session(db)
+        snap_old = _create_account_snapshot(db, old, ss_old)
+        _populate_daily_values(
+            db, old, snap_old, period_start, transition_day - timedelta(days=1),
+            "VTI", start_value=Decimal("10000"),
+        )
+        # Closing $0 sentinel from transition day onward
+        sentinel = SecurityService.ensure_exists(db, ZERO_BALANCE_TICKER, "Zero Balance Sentinel")
+        for d_offset in range((period_end - transition_day).days + 1):
+            d = transition_day + timedelta(days=d_offset)
+            db.add(DailyHoldingValue(
+                valuation_date=d,
+                account_id=old.id,
+                account_snapshot_id=snap_old.id,
+                security_id=sentinel.id,
+                ticker=ZERO_BALANCE_TICKER,
+                quantity=Decimal("0"),
+                close_price=Decimal("0"),
+                market_value=Decimal("0"),
+            ))
+
+        # New Plaid account: linked on transition_day, $10k onward
+        new = _create_account(
+            db, "Plaid",
+            provider_name="Plaid",
+            external_id="plaid_1",
+            is_active=True,
+            include_in_allocation=True,
+        )
+        ss_new = _create_sync_session(db)
+        snap_new = _create_account_snapshot(db, new, ss_new)
+        _populate_daily_values(
+            db, new, snap_new, transition_day, period_end, "VTI",
+            start_value=Decimal("10000"),
+        )
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_portfolio_returns(db, periods=["1M"])
+        ret = result.periods[0]
+
+        assert ret.has_sufficient_data is True
+        # Start value: old account's $10k at period_start (new not yet linked)
+        assert ret.start_value == Decimal("10000")
+        # End value: new account's $10k (old is $0 via closing sentinel)
+        assert ret.end_value == Decimal("10000")
+
+    def test_inactive_non_allocation_account_excluded_from_portfolio_returns(
+        self, db: Session
+    ):
+        """Inactive accounts with include_in_allocation=False are still excluded."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+
+        excluded = _create_account(
+            db, "Crypto (excluded)",
+            is_active=False,
+            include_in_allocation=False,
+        )
+        ss = _create_sync_session(db)
+        snap = _create_account_snapshot(db, excluded, ss)
+        _populate_daily_values(
+            db, excluded, snap, period_start, period_end, "BTC",
+            start_value=Decimal("50000"),
+        )
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_portfolio_returns(db, periods=["1M"])
+        ret = result.periods[0]
+
+        # No allocation accounts → no data
         assert ret.has_sufficient_data is False

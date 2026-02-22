@@ -13,12 +13,13 @@ from database import get_db
 from schemas import (
     AccountCreate, AccountResponse, AccountUpdate, AccountWithValue,
     ActivityCreate, ActivityResponse, ActivityUpdate,
-    BulkMarkReviewedRequest, HoldingResponse, ManualAccountCreate,
-    ManualHoldingInput,
+    BulkMarkReviewedRequest, DeactivateAccountRequest, HoldingResponse,
+    ManualAccountCreate, ManualHoldingInput,
 )
 from models import Account, AccountSnapshot, DailyHoldingValue, Holding, HoldingLot, LotDisposal
 from models.activity import Activity
 from models.utils import generate_uuid
+from services.account_service import AccountService
 from services.lot_ledger_service import LotLedgerService
 from services.manual_holdings_service import ManualHoldingsService
 from services.portfolio_service import PortfolioService
@@ -37,6 +38,9 @@ def _account_response_dict(account: Account) -> dict:
         "name": account.name,
         "institution_name": account.institution_name,
         "is_active": account.is_active,
+        "deactivated_at": account.deactivated_at,
+        "superseded_by_account_id": account.superseded_by_account_id,
+        "superseded_by_name": account.superseded_by.name if account.superseded_by else None,
         "account_type": account.account_type,
         "include_in_allocation": account.include_in_allocation,
         "assigned_asset_class_id": account.assigned_asset_class_id,
@@ -54,7 +58,7 @@ def _account_response_dict(account: Account) -> dict:
 @router.get("", response_model=list[AccountWithValue])
 def list_accounts(db: Session = Depends(get_db)):
     """List all accounts with asset class details and total values."""
-    accounts = db.query(Account).all()
+    accounts = db.query(Account).options(joinedload(Account.superseded_by)).all()
 
     # Use PortfolioService (DHV-based) for market values of active accounts
     portfolio = PortfolioService().get_portfolio_summary(db)
@@ -386,6 +390,14 @@ def update_account(
     """Update an account."""
     account = get_or_404(db, Account, account_id, "Account not found")
     update_dict = account_data.model_dump(exclude_unset=True)
+
+    # Deactivation must go through POST /deactivate for closing-snapshot logic
+    if update_dict.get("is_active") is False:
+        raise HTTPException(
+            status_code=400,
+            detail="Use POST /accounts/{id}/deactivate to deactivate an account",
+        )
+
     for key, value in update_dict.items():
         setattr(account, key, value)
 
@@ -393,10 +405,55 @@ def update_account(
     if "name" in update_dict:
         account.name_user_edited = True
 
+    # Clear deactivation fields when re-activating
+    if update_dict.get("is_active") is True:
+        account.deactivated_at = None
+        account.superseded_by_account_id = None
+
     db.commit()
     db.refresh(account)
 
     return _account_response_dict(account)
+
+
+@router.post("/{account_id}/deactivate", response_model=AccountResponse)
+def deactivate_account(
+    account_id: str,
+    body: DeactivateAccountRequest,
+    db: Session = Depends(get_db),
+):
+    """Deactivate an account, optionally recording a $0 closing snapshot.
+
+    The closing snapshot ensures historical portfolio charts show the account's
+    value going to $0 on the deactivation date, rather than abruptly vanishing
+    at the last sync date.
+    """
+    account = get_or_404(db, Account, account_id, "Account not found")
+    if not account.is_active:
+        raise HTTPException(status_code=400, detail="Account is already inactive")
+
+    if body.superseded_by_account_id is not None:
+        replacement = db.query(Account).filter(
+            Account.id == body.superseded_by_account_id
+        ).first()
+        if replacement is None:
+            raise HTTPException(status_code=400, detail="Replacement account not found")
+        if replacement.id == account_id:
+            raise HTTPException(
+                status_code=400, detail="An account cannot supersede itself"
+            )
+        if not replacement.is_active:
+            raise HTTPException(
+                status_code=400, detail="Replacement account must be active"
+            )
+
+    result = AccountService.deactivate_account(
+        db,
+        account,
+        create_closing_snapshot=body.create_closing_snapshot,
+        superseded_by_account_id=body.superseded_by_account_id,
+    )
+    return _account_response_dict(result)
 
 
 @router.delete("/{account_id}", status_code=204)

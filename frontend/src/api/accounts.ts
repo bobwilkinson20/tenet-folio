@@ -4,6 +4,7 @@ import type {
   Activity,
   ActivityCreate,
   ActivityUpdate,
+  DeactivateAccountRequest,
   DisposalReassignRequest,
   HoldingLot,
   LotBatchRequest,
@@ -49,6 +50,8 @@ export const accountsApi = {
     apiClient.post<Holding>(`/accounts/${accountId}/holdings`, data),
   updateHolding: (accountId: string, holdingId: string, data: ManualHoldingInput) =>
     apiClient.put<Holding>(`/accounts/${accountId}/holdings/${holdingId}`, data),
+  deactivate: (id: string, data: DeactivateAccountRequest) =>
+    apiClient.post<Account>(`/accounts/${id}/deactivate`, data),
   delete: (id: string) => apiClient.delete(`/accounts/${id}`),
   deleteHolding: (accountId: string, holdingId: string) =>
     apiClient.delete(`/accounts/${accountId}/holdings/${holdingId}`),

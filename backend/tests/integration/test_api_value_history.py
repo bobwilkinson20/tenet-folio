@@ -554,3 +554,69 @@ class TestValueHistoryAPI:
         assert vh_today_value == dash_net_worth
         # And the total must include both accounts (5000 + 3000)
         assert vh_today_value == Decimal("8000")
+
+    def test_deactivated_account_included_in_history(
+        self, client: TestClient, db: Session
+    ):
+        """Deactivated account's historical DHV rows appear in value-history."""
+        active_acct = _create_account(
+            db, "Active Account", external_id="ext_active"
+        )
+        deactivated_acct = _create_account(
+            db, "Deactivated Account", external_id="ext_deactivated"
+        )
+        deactivated_acct.is_active = False
+        deactivated_acct.deactivated_at = datetime(2025, 1, 8, tzinfo=timezone.utc)
+        db.flush()
+
+        snap = _create_sync_session(
+            db, datetime(2025, 1, 5, tzinfo=timezone.utc)
+        )
+
+        active_snap = AccountSnapshot(
+            account_id=active_acct.id,
+            sync_session_id=snap.id,
+            status="success",
+            total_value=Decimal("1000"),
+        )
+        deactivated_snap = AccountSnapshot(
+            account_id=deactivated_acct.id,
+            sync_session_id=snap.id,
+            status="success",
+            total_value=Decimal("2000"),
+        )
+        db.add_all([active_snap, deactivated_snap])
+        db.flush()
+
+        sec_aapl = get_or_create_security(db, "AAPL")
+        sec_goog = get_or_create_security(db, "GOOG")
+
+        d = date(2025, 1, 6)
+        db.add(DailyHoldingValue(
+            valuation_date=d,
+            account_id=active_acct.id,
+            account_snapshot_id=active_snap.id,
+            security_id=sec_aapl.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("100"),
+            market_value=Decimal("1000"),
+        ))
+        db.add(DailyHoldingValue(
+            valuation_date=d,
+            account_id=deactivated_acct.id,
+            account_snapshot_id=deactivated_snap.id,
+            security_id=sec_goog.id,
+            ticker="GOOG",
+            quantity=Decimal("5"),
+            close_price=Decimal("400"),
+            market_value=Decimal("2000"),
+        ))
+        db.commit()
+
+        response = client.get("/api/portfolio/value-history")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Total should include both active and deactivated account: 1000 + 2000
+        assert Decimal(data["data_points"][0]["value"]) == Decimal("3000")

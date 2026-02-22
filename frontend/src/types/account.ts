@@ -28,6 +28,9 @@ export interface Account {
   name: string;
   institution_name?: string | null;
   is_active: boolean;
+  deactivated_at?: string | null;
+  superseded_by_account_id?: string | null;
+  superseded_by_name?: string | null;
   account_type?: AccountType | null;
   include_in_allocation: boolean;
   assigned_asset_class_id: string | null;
@@ -40,6 +43,11 @@ export interface Account {
   last_sync_status?: string | null;
   last_sync_error?: string | null;
   balance_date?: string | null;
+}
+
+export interface DeactivateAccountRequest {
+  create_closing_snapshot: boolean;
+  superseded_by_account_id?: string | null;
 }
 
 export interface ManualHoldingInput {

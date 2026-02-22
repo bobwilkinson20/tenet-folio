@@ -94,11 +94,21 @@ class AccountUpdate(BaseModel):
     include_in_allocation: Optional[bool] = None
 
 
+class DeactivateAccountRequest(BaseModel):
+    """Schema for deactivating an account with optional closing snapshot."""
+
+    create_closing_snapshot: bool = True
+    superseded_by_account_id: Optional[str] = None
+
+
 class AccountResponse(AccountBase):
     """Schema for Account API response."""
 
     id: str
     is_active: bool
+    deactivated_at: Optional[datetime] = None
+    superseded_by_account_id: Optional[str] = None
+    superseded_by_name: Optional[str] = None  # Display name of replacement account
     account_type: Optional[str] = None
     include_in_allocation: bool = True
     assigned_asset_class_id: Optional[str] = None
