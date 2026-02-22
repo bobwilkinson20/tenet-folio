@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from models import Account, AccountSnapshot, DailyHoldingValue, SyncSession
 from models.activity import Activity
 from services.portfolio_returns_service import PortfolioReturnsService
+from services.security_service import SecurityService
 from tests.fixtures import get_or_create_security
+from utils.ticker import ZERO_BALANCE_TICKER
 
 
 # ---------------------------------------------------------------------------
@@ -1257,9 +1259,6 @@ class TestProviderTransitionReturns:
             "VTI", start_value=Decimal("10000"),
         )
         # Closing $0 sentinel from transition day onward
-        from utils.ticker import ZERO_BALANCE_TICKER
-        from services.security_service import SecurityService
-        from models import DailyHoldingValue
         sentinel = SecurityService.ensure_exists(db, ZERO_BALANCE_TICKER, "Zero Balance Sentinel")
         for d_offset in range((period_end - transition_day).days + 1):
             d = transition_day + timedelta(days=d_offset)
