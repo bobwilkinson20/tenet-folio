@@ -58,7 +58,7 @@ def _account_response_dict(account: Account) -> dict:
 @router.get("", response_model=list[AccountWithValue])
 def list_accounts(db: Session = Depends(get_db)):
     """List all accounts with asset class details and total values."""
-    accounts = db.query(Account).all()
+    accounts = db.query(Account).options(joinedload(Account.superseded_by)).all()
 
     # Use PortfolioService (DHV-based) for market values of active accounts
     portfolio = PortfolioService().get_portfolio_summary(db)
