@@ -64,6 +64,7 @@ describe("ReturnsPage", () => {
           {
             scope_id: "acc-1",
             scope_name: "Brokerage Account",
+            chained_from: [],
             periods: [
               makePeriod("1D", "0.0015"),
               makePeriod("1M", "0.06"),
@@ -76,6 +77,7 @@ describe("ReturnsPage", () => {
           {
             scope_id: "acc-2",
             scope_name: "Retirement Account",
+            chained_from: [],
             periods: [
               makePeriod("1D", "-0.002"),
               makePeriod("1M", "0.04"),

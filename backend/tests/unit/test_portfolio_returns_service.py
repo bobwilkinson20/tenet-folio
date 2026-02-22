@@ -1421,17 +1421,18 @@ class TestAccountChainResolution:
         assert names == ["Provider A"]
 
     def test_circular_chain_terminates(self, db: Session):
-        """Circular superseded_by links should not cause infinite loop."""
+        """Circular superseded_by links should not cause infinite loop or duplicates."""
         acc_a = _create_account(db, "Loop A", external_id="loop_a")
         acc_b = _create_account(db, "Loop B", external_id="loop_b")
         acc_a.superseded_by_account_id = acc_b.id
         acc_b.superseded_by_account_id = acc_a.id
         db.flush()
 
-        # Should terminate without error
+        # Should terminate without error and produce no duplicate IDs
         chain_ids, names = PortfolioReturnsService._resolve_account_chain(db, acc_b.id)
         assert acc_b.id in chain_ids
         assert acc_a.id in chain_ids
+        assert len(chain_ids) == len(set(chain_ids))
 
 
 # ---------------------------------------------------------------------------
@@ -1488,6 +1489,56 @@ class TestChainedAccountReturns:
         # Should have data from the old account at period_start
         assert ret.has_sufficient_data is True
         assert ret.start_value == Decimal("10000")
+
+    def test_overlapping_dhv_dates_summed_correctly(self, db: Session):
+        """When old and new accounts have overlapping DHV on the transition day,
+        both contribute to the total (mirrors real double-DHV during handoff)."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        period_start, period_end = PortfolioReturnsService._get_period_dates(
+            "1M", yesterday,
+        )
+        transition_day = period_start + timedelta(days=15)
+
+        old = _create_account(
+            db, "Old Overlap",
+            provider_name="SimpleFIN",
+            external_id="sf_overlap",
+            is_active=False,
+        )
+        ss = _create_sync_session(db)
+        snap_old = _create_account_snapshot(db, old, ss)
+        # Old account: $10k at start through transition_day (inclusive)
+        _populate_daily_values(
+            db, old, snap_old, period_start, transition_day,
+            "VTI", start_value=Decimal("10000"),
+        )
+
+        new = _create_account(
+            db, "New Overlap",
+            provider_name="Plaid",
+            external_id="plaid_overlap",
+        )
+        snap_new = _create_account_snapshot(db, new, ss)
+        # New account: $10k from transition_day (overlapping!) to end
+        _populate_daily_values(
+            db, new, snap_new, transition_day, period_end,
+            "VTI", start_value=Decimal("10000"),
+        )
+
+        old.superseded_by_account_id = new.id
+        db.flush()
+
+        service = PortfolioReturnsService()
+        result = service.get_account_returns(db, new.id, periods=["1M"])
+        ret = result.periods[0]
+
+        assert ret.has_sufficient_data is True
+        # Start: only old account has data → $10k
+        assert ret.start_value == Decimal("10000")
+        # On transition_day both accounts have DHV so values are summed ($20k).
+        # End: only new account has data → $10k
+        assert ret.end_value == Decimal("10000")
 
     def test_account_without_chain_has_empty_chained_from(self, db: Session):
         """Account with no predecessors has empty chained_from."""

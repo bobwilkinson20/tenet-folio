@@ -186,6 +186,10 @@ class PortfolioReturnsService:
     ) -> tuple[list[str], list[str]]:
         """Walk backward through superseded_by_account_id links.
 
+        Assumes 1-to-1 supersession (one predecessor per account).
+        If multiple accounts point to the same successor (fan-in /
+        consolidation), only the first predecessor found is included.
+
         Returns:
             (all_ids, predecessor_names) — IDs ordered oldest-first,
             names excluding the requested account.
@@ -197,20 +201,23 @@ class PortfolioReturnsService:
 
         while current_id and current_id not in seen:
             seen.add(current_id)
-            # Find accounts that were superseded by current_id
+            # Find the account that was superseded by current_id
             predecessor = (
                 db.query(Account)
                 .filter(Account.superseded_by_account_id == current_id)
                 .first()
             )
             if predecessor:
-                chain_ids.insert(0, predecessor.id)
-                predecessor_names.insert(0, predecessor.name)
+                chain_ids.append(predecessor.id)
+                predecessor_names.append(predecessor.name)
                 current_id = predecessor.id
             else:
                 break
 
-        chain_ids.append(account_id)
+        chain_ids.reverse()
+        predecessor_names.reverse()
+        if account_id not in chain_ids:
+            chain_ids.append(account_id)
         return chain_ids, predecessor_names
 
     def _compute_scope_returns(

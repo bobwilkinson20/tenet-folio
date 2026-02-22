@@ -139,12 +139,13 @@ export function ReturnsPage() {
                         <td className="px-4 py-3 text-tf-text-primary font-medium">
                           <span className="inline-flex items-center gap-1.5">
                             {account.scope_name}
-                            {account.chained_from && account.chained_from.length > 0 && (
+                            {account.chained_from.length > 0 && (
                               <span
                                 title={`Includes history from: ${account.chained_from.join(", ")}`}
                                 className="text-tf-text-tertiary"
                               >
                                 <svg
+                                  aria-hidden="true"
                                   className="w-4 h-4"
                                   viewBox="0 0 24 24"
                                   fill="none"
