@@ -397,6 +397,11 @@ def update_account(
     if "name" in update_dict:
         account.name_user_edited = True
 
+    # Clear deactivation fields when re-activating
+    if update_dict.get("is_active") is True:
+        account.deactivated_at = None
+        account.superseded_by_account_id = None
+
     db.commit()
     db.refresh(account)
 

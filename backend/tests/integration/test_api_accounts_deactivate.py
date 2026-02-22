@@ -154,3 +154,45 @@ def test_deactivate_response_includes_superseded_by_name(client, db):
     )
     data = response.json()
     assert data["superseded_by_name"] == "Plaid Test Account"
+
+
+def test_reactivate_clears_deactivation_fields(client, db):
+    """PATCH with is_active=True clears deactivated_at and superseded_by."""
+    old = _make_account(db, provider="SimpleFIN", external_id="sf_1")
+    new = _make_account(db, provider="Plaid", external_id="plaid_1")
+
+    # Deactivate with superseded_by
+    client.post(
+        f"/api/accounts/{old.id}/deactivate",
+        json={
+            "create_closing_snapshot": False,
+            "superseded_by_account_id": new.id,
+        },
+    )
+
+    # Re-activate via PATCH
+    response = client.patch(
+        f"/api/accounts/{old.id}",
+        json={"is_active": True},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_active"] is True
+    assert data["deactivated_at"] is None
+    assert data["superseded_by_account_id"] is None
+    assert data["superseded_by_name"] is None
+
+
+def test_patch_cannot_set_superseded_by(client, db):
+    """PATCH /accounts/{id} should not accept superseded_by_account_id."""
+    old = _make_account(db, provider="SimpleFIN", external_id="sf_1")
+    new = _make_account(db, provider="Plaid", external_id="plaid_1")
+
+    # Try to set superseded_by via PATCH (should be ignored, not in schema)
+    response = client.patch(
+        f"/api/accounts/{old.id}",
+        json={"superseded_by_account_id": new.id},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["superseded_by_account_id"] is None

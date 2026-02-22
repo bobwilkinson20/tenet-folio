@@ -92,7 +92,6 @@ class AccountUpdate(BaseModel):
     assigned_asset_class_id: Optional[str] = None
     account_type: Optional[AccountType] = None
     include_in_allocation: Optional[bool] = None
-    superseded_by_account_id: Optional[str] = None
 
 
 class DeactivateAccountRequest(BaseModel):
