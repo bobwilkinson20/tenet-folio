@@ -73,10 +73,20 @@ export function AccountsPage() {
       // Deactivating: open the dialog to allow closing snapshot + replacement link
       setDeactivatingAccount(account);
     } else {
-      // Re-activating: simple optimistic toggle, no dialog needed
-      updateAccount(account.id, { is_active: true });
+      // Re-activating: optimistic toggle, clearing deactivation metadata
+      updateAccount(account.id, {
+        is_active: true,
+        deactivated_at: null,
+        superseded_by_account_id: null,
+        superseded_by_name: null,
+      });
       accountsApi.update(account.id, { is_active: true }).catch((error) => {
-        updateAccount(account.id, { is_active: false });
+        updateAccount(account.id, {
+          is_active: account.is_active,
+          deactivated_at: account.deactivated_at,
+          superseded_by_account_id: account.superseded_by_account_id,
+          superseded_by_name: account.superseded_by_name,
+        });
         console.error("Failed to reactivate account:", error);
       });
     }
