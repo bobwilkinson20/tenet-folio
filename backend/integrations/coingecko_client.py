@@ -48,8 +48,14 @@ _KNOWN_COIN_IDS: dict[str, str] = {
 }
 
 # Max retries for rate-limited requests
-_MAX_RETRIES = 3
-_BASE_DELAY_SECONDS = 1.0
+_MAX_RETRIES = 5
+_BASE_DELAY_SECONDS = 4.0
+
+# Delay between per-coin requests to avoid burst rate limits
+_INTER_REQUEST_DELAY = 2.0
+
+# Maximum Retry-After value we'll honor (seconds)
+_MAX_RETRY_AFTER = 120
 
 
 class CoinGeckoClient:
@@ -138,6 +144,18 @@ class CoinGeckoClient:
             )
             return None
 
+    def _get_retry_delay(self, response: httpx.Response, attempt: int) -> float:
+        """Compute retry delay from Retry-After header or exponential backoff."""
+        retry_after = response.headers.get("Retry-After")
+        if retry_after is not None:
+            try:
+                delay = min(float(retry_after), float(_MAX_RETRY_AFTER))
+                if delay > 0:
+                    return delay
+            except (ValueError, TypeError):
+                pass
+        return _BASE_DELAY_SECONDS * (2 ** attempt)
+
     def _request_with_retry(
         self, method: str, path: str, **kwargs
     ) -> httpx.Response:
@@ -147,7 +165,7 @@ class CoinGeckoClient:
             try:
                 response = self._client.request(method, path, **kwargs)
                 if response.status_code == 429:
-                    delay = _BASE_DELAY_SECONDS * (2 ** attempt)
+                    delay = self._get_retry_delay(response, attempt)
                     logger.warning(
                         "CoinGecko: rate limited, retrying in %.1fs (attempt %d/%d)",
                         delay, attempt + 1, _MAX_RETRIES,
@@ -158,7 +176,7 @@ class CoinGeckoClient:
                 return response
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
-                    delay = _BASE_DELAY_SECONDS * (2 ** attempt)
+                    delay = self._get_retry_delay(e.response, attempt)
                     logger.warning(
                         "CoinGecko: rate limited, retrying in %.1fs (attempt %d/%d)",
                         delay, attempt + 1, _MAX_RETRIES,
@@ -201,7 +219,10 @@ class CoinGeckoClient:
         # Add a day to end_date to make it inclusive
         to_ts = int(datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc).timestamp())
 
-        for symbol in symbols:
+        for i, symbol in enumerate(symbols):
+            if i > 0:
+                time_module.sleep(_INTER_REQUEST_DELAY)
+
             coin_id = self._resolve_coin_id(symbol)
             if coin_id is None:
                 continue
