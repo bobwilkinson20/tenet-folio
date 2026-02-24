@@ -220,15 +220,15 @@ class TestHoldingsDelta:
     def test_synthetic_ticker_shows_name(self, db, monkeypatch, capsys):
         acct = _make_account(db, "Test Account", ext_id="e1")
         # Use a synthetic ticker but give the security a recognizable name
-        get_or_create_security(db, "_SF:x1", "My CD Fund")
-        _make_dhv(db, acct, "_SF:x1", date(2026, 1, 15), Decimal("100"), Decimal("1"))
-        _make_dhv(db, acct, "_SF:x1", date(2026, 1, 16), Decimal("100"), Decimal("1.10"))
+        get_or_create_security(db, "_SYN:x1", "My CD Fund")
+        _make_dhv(db, acct, "_SYN:x1", date(2026, 1, 15), Decimal("100"), Decimal("1"))
+        _make_dhv(db, acct, "_SYN:x1", date(2026, 1, 16), Decimal("100"), Decimal("1.10"))
 
         output = self._run_delta(db, monkeypatch, capsys, date(2026, 1, 15), date(2026, 1, 16))
         # The detail table row should show security name, not the raw synthetic ticker
         detail_lines = [line for line in output.splitlines() if line.startswith("PRICE")]
         assert len(detail_lines) == 1
-        assert "_SF:x1" not in detail_lines[0]
+        assert "_SYN:x1" not in detail_lines[0]
         assert "My CD Fund" in detail_lines[0]
 
     def test_sort_by_ticker(self, db, monkeypatch, capsys):

@@ -25,7 +25,7 @@ const mockHolding = {
 const mockManualHolding = {
   id: "h-man-1",
   account_snapshot_id: "acct-snap-1",
-  ticker: "_MAN:abc12345",
+  ticker: "_SYN:abc12345",
   quantity: 1,
   snapshot_price: 500000,
   snapshot_value: 500000,
@@ -384,7 +384,7 @@ describe("HoldingFormModal", () => {
       expect(accountsApi.addHolding).not.toHaveBeenCalled();
     });
 
-    it("auto-selects Other mode and pre-populates description when editing _MAN: holding", () => {
+    it("auto-selects Other mode and pre-populates description when editing _SYN: holding", () => {
       render(
         <HoldingFormModal
           isOpen={true}

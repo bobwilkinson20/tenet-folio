@@ -4,24 +4,19 @@ Mirrors frontend/src/utils/ticker.ts for consistent behavior.
 """
 
 ZERO_BALANCE_TICKER = "_ZERO_BALANCE"
+SYNTHETIC_PREFIX = "_SYN:"
 
 
 def is_synthetic_ticker(ticker: str) -> bool:
     """Check if ticker is a synthetic internal identifier.
 
     Synthetic tickers include:
-    - _SF:{hash}      — SimpleFIN provider for non-tradable holdings
-    - _MAN:{hash}     — Manual holdings for "Other" assets
+    - _SYN:{hash}     — Non-tradable holdings (any provider or manual)
     - _ZERO_BALANCE   — Sentinel for accounts with zero holdings
 
     These should generally be hidden from users in display contexts.
     """
-    return (
-        ticker.startswith("_SF:")
-        or ticker.startswith("_MAN:")
-        or ticker.startswith("_PLAID:")
-        or ticker == ZERO_BALANCE_TICKER
-    )
+    return ticker.startswith(SYNTHETIC_PREFIX) or ticker == ZERO_BALANCE_TICKER
 
 
 def is_cash_ticker(ticker: str) -> bool:

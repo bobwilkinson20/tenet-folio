@@ -59,10 +59,10 @@ def _generate_synthetic_symbol(holding_id: str) -> str:
         holding_id: The SimpleFIN holding ID
 
     Returns:
-        A synthetic symbol in format _SF:{8-char-hash}
+        A synthetic symbol in format _SYN:{8-char-hash}
     """
     hash_hex = hashlib.sha256(holding_id.encode()).hexdigest()
-    return f"_SF:{hash_hex[:8]}"
+    return f"_SYN:{hash_hex[:8]}"
 
 
 class SimpleFINClient:

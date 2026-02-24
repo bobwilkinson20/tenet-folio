@@ -307,7 +307,7 @@ Called on startup and before every sync. Fills from the last DHV date through ye
 
 5. Filter non-market symbols
    ├── Remove cash tickers (USD, CASH, CAD, SPAXX, etc.)
-   ├── Remove synthetic tickers (_SF:*, _MAN:*, _ZERO_BALANCE)
+   ├── Remove synthetic tickers (_SYN:*, _ZERO_BALANCE)
    └── Detect crypto symbols (securities classified under "Crypto" asset class)
 
 6. Fetch market data
@@ -427,7 +427,7 @@ For each holding on each day, the system resolves a price using this cascade:
    └── Or _CASH: prefix (e.g., _CASH:USD from Coinbase)
    → Always $1.00
 
-2. Synthetic ticker? (_SF:*, _MAN:*, _ZERO_BALANCE)
+2. Synthetic ticker? (_SYN:*, _ZERO_BALANCE)
    → Use snapshot_price (no market data exists for these)
 
 3. Market data available?
@@ -499,7 +499,8 @@ SQLite's `BEGIN IMMEDIATE` transaction mode serializes these operations at the d
 
 Non-tradable "Other" holdings (described by name, not ticker) get synthetic tickers:
 
-- Format: `_MAN:{12-hex-chars}` (SHA-256 of `description:unique_id`)
+- Format: `_SYN:{12-hex-chars}` (SHA-256 of `description:unique_id`)
+- Same `_SYN:` prefix used by all providers (SimpleFIN, Plaid) and manual holdings
 - Stored as quantity=1, price=market_value (since there's no per-share price)
 - If a holding is deleted and re-added with the same description, the original ticker is reused (preserves asset classification history)
 - Hidden from users in the UI via `isSyntheticTicker()` utility

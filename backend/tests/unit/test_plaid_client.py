@@ -209,10 +209,10 @@ class TestSyntheticSymbol:
         assert s1 == s2
 
     def test_format(self):
-        """Symbol has _PLAID:{8 hex chars} format."""
+        """Symbol has _SYN:{8 hex chars} format."""
         symbol = _generate_plaid_synthetic_symbol("sec_abc")
-        assert symbol.startswith("_PLAID:")
-        assert len(symbol) == len("_PLAID:") + 8
+        assert symbol.startswith("_SYN:")
+        assert len(symbol) == len("_SYN:") + 8
 
     def test_different_ids_produce_different_symbols(self):
         s1 = _generate_plaid_synthetic_symbol("sec_aaa")
@@ -280,7 +280,7 @@ class TestMapHolding:
         result = client._map_holding(holding_data, securities_map)
 
         assert result is not None
-        assert result.symbol.startswith("_PLAID:")
+        assert result.symbol.startswith("_SYN:")
         assert result.name == "Target Fund"
         assert result.cost_basis is None
 

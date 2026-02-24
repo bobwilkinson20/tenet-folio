@@ -3,23 +3,18 @@
  */
 
 export const ZERO_BALANCE_TICKER = "_ZERO_BALANCE";
+export const SYNTHETIC_PREFIX = "_SYN:";
 
 /**
  * Checks if a ticker is a synthetic internal identifier.
  * Synthetic tickers include:
- * - _SF:{hash} - SimpleFIN provider for non-tradable holdings
- * - _MAN:{hash} - Manual holdings for "Other" assets
+ * - _SYN:{hash} - Non-tradable holdings (any provider or manual)
  * - _ZERO_BALANCE - Sentinel for accounts with zero holdings
  *
  * These should generally be hidden from users in UI views.
  */
 export function isSyntheticTicker(ticker: string): boolean {
-  return (
-    ticker.startsWith("_SF:") ||
-    ticker.startsWith("_MAN:") ||
-    ticker.startsWith("_PLAID:") ||
-    ticker === ZERO_BALANCE_TICKER
-  );
+  return ticker.startsWith(SYNTHETIC_PREFIX) || ticker === ZERO_BALANCE_TICKER;
 }
 
 /**

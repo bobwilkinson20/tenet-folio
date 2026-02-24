@@ -531,8 +531,7 @@ class PortfolioValuationService:
         symbols_to_fetch = [
             s for s in all_symbols
             if s.upper() not in CASH_TICKERS
-            and not s.startswith("_MAN:")
-            and not s.startswith("_SF:")
+            and not s.startswith("_SYN:")
             and not s.startswith("_CASH:")
         ]
         result.symbols_fetched = len(symbols_to_fetch)

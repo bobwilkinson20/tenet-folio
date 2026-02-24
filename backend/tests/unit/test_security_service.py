@@ -49,12 +49,12 @@ class TestEnsureExists:
 
     def test_overwrites_name_when_update_name_true(self, db):
         """When update_name=True, overwrites the existing name."""
-        existing = Security(ticker="_MAN:abc123", name="Old Description")
+        existing = Security(ticker="_SYN:abc123", name="Old Description")
         db.add(existing)
         db.flush()
 
         security = SecurityService.ensure_exists(
-            db, "_MAN:abc123", "New Description", update_name=True
+            db, "_SYN:abc123", "New Description", update_name=True
         )
         assert security.name == "New Description"
 

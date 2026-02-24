@@ -327,7 +327,7 @@ def test_get_account_holdings_with_synthetic_ticker(client: object, account, syn
 
     # Create a security with a synthetic ticker
     synthetic_security = Security(
-        ticker="_SF:abc12345",
+        ticker="_SYN:abc12345",
         name="Vanguard Target Retirement 2045",
     )
     db.add(synthetic_security)
@@ -345,7 +345,7 @@ def test_get_account_holdings_with_synthetic_ticker(client: object, account, syn
     holding = Holding(
         account_snapshot_id=acct_snap.id,
         security_id=synthetic_security.id,
-        ticker="_SF:abc12345",
+        ticker="_SYN:abc12345",
         quantity=Decimal("100.00"),
         snapshot_price=Decimal("50.00"),
         snapshot_value=Decimal("5000.00"),
@@ -357,7 +357,7 @@ def test_get_account_holdings_with_synthetic_ticker(client: object, account, syn
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
-    assert data[0]["ticker"] == "_SF:abc12345"
+    assert data[0]["ticker"] == "_SYN:abc12345"
     assert data[0]["security_name"] == "Vanguard Target Retirement 2045"
 
 
@@ -602,7 +602,7 @@ def test_add_other_holding_via_api(client, manual_account):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["ticker"].startswith("_MAN:")
+    assert data["ticker"].startswith("_SYN:")
     assert Decimal(data["snapshot_value"]) == Decimal("500000")
 
 
@@ -638,7 +638,7 @@ def test_update_other_holding_via_api(client, manual_account):
     assert response.status_code == 200
     data = response.json()
     assert Decimal(data["snapshot_value"]) == Decimal("520000")
-    assert data["ticker"].startswith("_MAN:")
+    assert data["ticker"].startswith("_SYN:")
 
 
 def test_other_holding_visible_in_holdings_list(client, manual_account):
@@ -660,7 +660,7 @@ def test_other_holding_visible_in_holdings_list(client, manual_account):
     assert len(data) == 2
     tickers = {h["ticker"] for h in data}
     assert "VTI" in tickers
-    assert any(t.startswith("_MAN:") for t in tickers)
+    assert any(t.startswith("_SYN:") for t in tickers)
 
 
 # --- Account Type and Include in Allocation Tests ---

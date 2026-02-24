@@ -542,7 +542,7 @@ class TestSimpleFINClientProviderProtocol:
         assert len(holdings) == 2
 
         # Find the synthetic holding
-        synthetic = next(h for h in holdings if h.symbol.startswith("_SF:"))
+        synthetic = next(h for h in holdings if h.symbol.startswith("_SYN:"))
         assert synthetic.symbol == _generate_synthetic_symbol("hold_target_2045")
         assert synthetic.name == "Vanguard Target Retirement 2045"
         assert synthetic.market_value == Decimal("5000.0")
@@ -691,16 +691,16 @@ class TestSyntheticSymbolGeneration:
         symbol2 = _generate_synthetic_symbol(holding_id)
 
         assert symbol1 == symbol2
-        assert symbol1.startswith("_SF:")
-        assert len(symbol1) == 12  # "_SF:" (4) + 8 hex chars
+        assert symbol1.startswith("_SYN:")
+        assert len(symbol1) == 13  # "_SYN:" (5) + 8 hex chars
 
     def test_synthetic_symbol_format(self):
         """Synthetic symbols have correct format."""
         symbol = _generate_synthetic_symbol("test_id")
 
-        assert symbol.startswith("_SF:")
+        assert symbol.startswith("_SYN:")
         # Should be 8 hex characters after prefix
-        hex_part = symbol[4:]
+        hex_part = symbol[5:]
         assert len(hex_part) == 8
         # Verify it's valid hex
         int(hex_part, 16)
@@ -788,7 +788,7 @@ class TestSyntheticSymbolGeneration:
         symbols = {h.symbol for h in holdings}
         assert "SOLD" in symbols
         # h2 should have a synthetic symbol
-        synthetic = next(h for h in holdings if h.symbol.startswith("_SF:"))
+        synthetic = next(h for h in holdings if h.symbol.startswith("_SYN:"))
         assert synthetic.market_value == Decimal("5000.0")
 
 
@@ -880,7 +880,7 @@ class TestRealisticAPIResponse:
             holdings = client.get_holdings()
 
         # Find the 529 target date fund (no ticker symbol in response)
-        synthetic_holdings = [h for h in holdings if h.symbol.startswith("_SF:")]
+        synthetic_holdings = [h for h in holdings if h.symbol.startswith("_SYN:")]
         assert len(synthetic_holdings) == 1
 
         target_fund = synthetic_holdings[0]
