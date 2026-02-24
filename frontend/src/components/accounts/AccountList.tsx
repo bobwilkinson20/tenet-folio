@@ -273,9 +273,13 @@ export function AccountList({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <Link to={`/accounts/${account.id}`} className="text-tf-accent-primary hover:text-tf-accent-hover underline text-ellipsis overflow-hidden">{account.name}</Link>
-                      {account.provider_name === "Manual" && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-tf-info/10 text-tf-info" data-testid={`manual-badge-${account.id}`}>
+                      {account.provider_name === "Manual" ? (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-tf-info/10 text-tf-info" data-testid={`provider-badge-${account.id}`}>
                           Manual
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-tf-bg-elevated text-tf-text-secondary" data-testid={`provider-badge-${account.id}`}>
+                          {account.provider_name}
                         </span>
                       )}
                     </div>

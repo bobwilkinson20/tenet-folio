@@ -198,9 +198,16 @@ export function AccountsTray({
                   >
                     <SyncIcon account={account} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-tf-text-primary truncate">
-                        {account.name}
-                      </p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium text-tf-text-primary truncate">
+                          {account.name}
+                        </p>
+                        {account.provider_name !== "Manual" && (
+                          <span className="px-1.5 py-0 rounded text-[10px] font-medium bg-tf-bg-elevated text-tf-text-tertiary flex-shrink-0" data-testid={`tray-provider-badge-${account.id}`}>
+                            {account.provider_name}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-tf-text-tertiary truncate">
                         {account.institution_name || account.provider_name}
                       </p>
