@@ -7,19 +7,10 @@ import {
 
 describe("ticker utilities", () => {
   describe("isSyntheticTicker", () => {
-    it("returns true for _SF: prefixed tickers", () => {
-      expect(isSyntheticTicker("_SF:abc12345")).toBe(true);
-      expect(isSyntheticTicker("_SF:12345678")).toBe(true);
-    });
-
-    it("returns true for _MAN: prefixed tickers", () => {
-      expect(isSyntheticTicker("_MAN:abc123456789")).toBe(true);
-      expect(isSyntheticTicker("_MAN:123456789012")).toBe(true);
-    });
-
-    it("returns true for _PLAID: prefixed tickers", () => {
-      expect(isSyntheticTicker("_PLAID:abc12345")).toBe(true);
-      expect(isSyntheticTicker("_PLAID:12345678")).toBe(true);
+    it("returns true for _SYN: prefixed tickers", () => {
+      expect(isSyntheticTicker("_SYN:abc12345")).toBe(true);
+      expect(isSyntheticTicker("_SYN:12345678")).toBe(true);
+      expect(isSyntheticTicker("_SYN:abc123456789")).toBe(true);
     });
 
     it("returns false for regular tickers", () => {
@@ -41,6 +32,12 @@ describe("ticker utilities", () => {
     it("returns false for empty string", () => {
       expect(isSyntheticTicker("")).toBe(false);
     });
+
+    it("returns false for old prefixes", () => {
+      expect(isSyntheticTicker("_SF:abc12345")).toBe(false);
+      expect(isSyntheticTicker("_MAN:abc123456789")).toBe(false);
+      expect(isSyntheticTicker("_PLAID:abc12345")).toBe(false);
+    });
   });
 
   describe("isCashTicker", () => {
@@ -56,8 +53,8 @@ describe("ticker utilities", () => {
     });
 
     it("returns false for synthetic tickers", () => {
-      expect(isCashTicker("_SF:abc12345")).toBe(false);
-      expect(isCashTicker("_MAN:abc123456789")).toBe(false);
+      expect(isCashTicker("_SYN:abc12345")).toBe(false);
+      expect(isCashTicker("_SYN:abc123456789")).toBe(false);
     });
 
     it("returns false for empty string", () => {

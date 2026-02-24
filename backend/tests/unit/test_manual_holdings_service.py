@@ -345,11 +345,11 @@ class TestManualHoldingInputValidation:
 class TestSyntheticTickerGeneration:
     def test_man_prefix(self):
         ticker = generate_manual_synthetic_ticker("Test", "abc")
-        assert ticker.startswith("_MAN:")
+        assert ticker.startswith("_SYN:")
 
     def test_length(self):
         ticker = generate_manual_synthetic_ticker("Test", "abc")
-        # _MAN: (5 chars) + 12 hex chars = 17 total
+        # _SYN: (5 chars) + 12 hex chars = 17 total
         assert len(ticker) == 17
 
     def test_uniqueness(self):
@@ -366,7 +366,7 @@ class TestOtherModeHoldings:
         )
         holding = ManualHoldingsService.add_holding(db, account, holding_input)
 
-        assert holding.ticker.startswith("_MAN:")
+        assert holding.ticker.startswith("_SYN:")
         assert holding.snapshot_value == Decimal("500000")
         assert holding.quantity == Decimal("1")
 
@@ -391,7 +391,7 @@ class TestOtherModeHoldings:
 
         # Update value
         current = ManualHoldingsService.get_current_holdings(db, account.id)
-        man_holding = [h for h in current if h.ticker.startswith("_MAN:")][0]
+        man_holding = [h for h in current if h.ticker.startswith("_SYN:")][0]
 
         updated = ManualHoldingsService.update_holding(
             db, account, man_holding.id,
@@ -410,7 +410,7 @@ class TestOtherModeHoldings:
         ticker = holding.ticker
 
         current = ManualHoldingsService.get_current_holdings(db, account.id)
-        man_holding = [h for h in current if h.ticker.startswith("_MAN:")][0]
+        man_holding = [h for h in current if h.ticker.startswith("_SYN:")][0]
 
         ManualHoldingsService.update_holding(
             db, account, man_holding.id,
@@ -452,7 +452,7 @@ class TestOtherModeHoldings:
 
         tickers = {h.ticker for h in current}
         assert "VTI" in tickers
-        assert any(t.startswith("_MAN:") for t in tickers)
+        assert any(t.startswith("_SYN:") for t in tickers)
 
     def test_readd_reuses_ticker_after_delete(self, db):
         """Deleting and re-adding with the same description reuses the ticker."""

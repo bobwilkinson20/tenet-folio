@@ -105,7 +105,7 @@ setPreference("accounts.hideInactive", true);
 ```
 Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The hook loads all preferences on mount, applies optimistic updates, and rolls back on API errors. Prefer this over `useState` for any toggle, filter, or setting the user would expect to survive a refresh.
 
-**Synthetic Tickers:** The backend generates synthetic ticker identifiers for holdings that aren't tradable securities (format: `_SF:{hash}` for SimpleFIN, `_MAN:{hash}` for manual "Other" holdings). These are internal identifiers and should NOT be displayed to users in UI views. Use the `isSyntheticTicker()` utility from `@/utils/ticker` to detect and hide them. Show only the security name for synthetic tickers. Exception: Admin/settings pages like SecurityList may show all tickers for management purposes.
+**Synthetic Tickers:** The backend generates synthetic ticker identifiers for holdings that aren't tradable securities (format: `_SYN:{hash}` — unified prefix for all providers and manual holdings). These are internal identifiers and should NOT be displayed to users in UI views. Use the `isSyntheticTicker()` utility from `@/utils/ticker` to detect and hide them. Show only the security name for synthetic tickers. Exception: Admin/settings pages like SecurityList may show all tickers for management purposes.
 
 ## File Locations
 

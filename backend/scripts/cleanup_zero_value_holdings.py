@@ -30,7 +30,7 @@ def cleanup_zero_value_holdings(dry_run: bool = False):
         zero_value_holdings = (
             db.query(Holding)
             .filter(
-                Holding.ticker.like("_SF:%"),
+                Holding.ticker.like("_SYN:%"),
                 Holding.market_value <= Decimal("0"),
             )
             .all()

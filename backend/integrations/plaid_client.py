@@ -57,10 +57,10 @@ def _generate_plaid_synthetic_symbol(security_id: str) -> str:
         security_id: The Plaid security_id for the holding.
 
     Returns:
-        A synthetic ticker in the format ``_PLAID:{hash8}``.
+        A synthetic ticker in the format ``_SYN:{hash8}``.
     """
     h = hashlib.sha256(security_id.encode()).hexdigest()[:8]
-    return f"_PLAID:{h}"
+    return f"_SYN:{h}"
 
 
 class PlaidClient:

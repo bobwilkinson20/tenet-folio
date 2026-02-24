@@ -192,10 +192,10 @@ export function AccountDetailsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-tf-text-tertiary">
-                    {h.ticker.startsWith("_MAN:") ? "-" : Number(h.quantity).toLocaleString()}
+                    {isSyntheticTicker(h.ticker) ? "-" : Number(h.quantity).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-tf-text-tertiary">
-                    {h.ticker.startsWith("_MAN:") ? "-" : `$${Number(h.market_price ?? h.snapshot_price).toLocaleString(undefined, {
+                    {isSyntheticTicker(h.ticker) ? "-" : `$${Number(h.market_price ?? h.snapshot_price).toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                     })}`}
                   </td>

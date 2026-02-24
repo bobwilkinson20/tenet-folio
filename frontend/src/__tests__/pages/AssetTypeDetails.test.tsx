@@ -193,7 +193,7 @@ describe("AssetTypeDetailsPage", () => {
     expect(rows[1].className).not.toContain("bg-tf-bg-secondary");
   });
 
-  it("shows em-dash for _MAN: synthetic tickers", async () => {
+  it("shows em-dash for _SYN: manual synthetic tickers", async () => {
     const detailWithSynthetic = {
       ...mockDetail,
       holdings: [
@@ -201,7 +201,7 @@ describe("AssetTypeDetailsPage", () => {
           holding_id: "h-3",
           account_id: "acc-3",
           account_name: "Manual Account",
-          ticker: "_MAN:abc123456789",
+          ticker: "_SYN:abc123456789",
           security_name: "Primary Residence",
           market_value: "500000.00",
         },
@@ -219,7 +219,7 @@ describe("AssetTypeDetailsPage", () => {
     expect(screen.getByText("Primary Residence")).toBeInTheDocument();
 
     // Synthetic ticker should NOT be displayed
-    expect(screen.queryByText("_MAN:abc123456789")).not.toBeInTheDocument();
+    expect(screen.queryByText("_SYN:abc123456789")).not.toBeInTheDocument();
 
     // Em-dash should be shown in ticker column (first column)
     const rows = screen.getAllByRole("row");
@@ -227,7 +227,7 @@ describe("AssetTypeDetailsPage", () => {
     expect(groupHeaderCells[0].textContent).toBe("—");
   });
 
-  it("shows em-dash for _SF: synthetic tickers", async () => {
+  it("shows em-dash for _SYN: provider synthetic tickers", async () => {
     const detailWithSynthetic = {
       ...mockDetail,
       holdings: [
@@ -235,7 +235,7 @@ describe("AssetTypeDetailsPage", () => {
           holding_id: "h-4",
           account_id: "acc-4",
           account_name: "529 Plan",
-          ticker: "_SF:xyz98765",
+          ticker: "_SYN:xyz98765",
           security_name: "Vanguard Target Trust",
           market_value: "50000.00",
         },
@@ -253,7 +253,7 @@ describe("AssetTypeDetailsPage", () => {
     expect(screen.getByText("Vanguard Target Trust")).toBeInTheDocument();
 
     // Synthetic ticker should NOT be displayed
-    expect(screen.queryByText("_SF:xyz98765")).not.toBeInTheDocument();
+    expect(screen.queryByText("_SYN:xyz98765")).not.toBeInTheDocument();
 
     // Em-dash should be shown in ticker column (first column)
     const rows = screen.getAllByRole("row");

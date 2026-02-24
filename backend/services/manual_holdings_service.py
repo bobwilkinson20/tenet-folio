@@ -25,11 +25,11 @@ MANUAL_PROVIDER_NAME = "Manual"
 def generate_manual_synthetic_ticker(description: str, unique_id: str) -> str:
     """Generate a synthetic ticker for a description-based holding.
 
-    Format: _MAN:{12-hex-chars} (SHA256 of description:unique_id)
+    Format: _SYN:{12-hex-chars} (SHA256 of description:unique_id)
     """
     raw = f"{description}:{unique_id}"
     hex_hash = hashlib.sha256(raw.encode()).hexdigest()[:12]
-    return f"_MAN:{hex_hash}"
+    return f"_SYN:{hex_hash}"
 
 
 class ManualHoldingsService:
@@ -139,7 +139,7 @@ class ManualHoldingsService:
                 db,
                 h_data["ticker"],
                 name=h_data.get("description"),
-                update_name=h_data["ticker"].startswith("_MAN:"),
+                update_name=h_data["ticker"].startswith("_SYN:"),
             )
 
             holding = Holding(
@@ -183,8 +183,8 @@ class ManualHoldingsService:
             "price": holding.snapshot_price,
             "market_value": holding.snapshot_value,
         }
-        # Preserve description for _MAN: holdings so Security.name stays current
-        if holding.ticker.startswith("_MAN:") and db is not None:
+        # Preserve description for _SYN: holdings so Security.name stays current
+        if holding.ticker.startswith("_SYN:") and db is not None:
             security = db.query(Security).filter_by(ticker=holding.ticker).first()
             if security:
                 result["description"] = security.name
@@ -226,7 +226,7 @@ class ManualHoldingsService:
         description: str,
         current_tickers: set[str],
     ) -> Optional[str]:
-        """Find an existing _MAN: Security whose name matches the description.
+        """Find an existing _SYN: Security whose name matches the description.
 
         Reusing the ticker preserves asset classification history when a
         holding is deleted and later re-added with the same description.
@@ -237,7 +237,7 @@ class ManualHoldingsService:
         existing = (
             db.query(Security)
             .filter(
-                Security.ticker.startswith("_MAN:"),
+                Security.ticker.startswith("_SYN:"),
                 Security.name == description,
             )
             .first()
@@ -360,8 +360,8 @@ class ManualHoldingsService:
         for h in current:
             if h.id == holding_id:
                 found = True
-                # For Other mode edits, reuse the existing _MAN: ticker
-                existing_ticker = h.ticker if h.ticker.startswith("_MAN:") else None
+                # For Other mode edits, reuse the existing _SYN: ticker
+                existing_ticker = h.ticker if h.ticker.startswith("_SYN:") else None
                 data = ManualHoldingsService._input_to_dict(
                     holding_input, existing_ticker=existing_ticker
                 )

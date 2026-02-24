@@ -426,12 +426,12 @@ describe("AccountDetailsPage", () => {
       expect(screen.getByText("No holdings found. Sync required.")).toBeInTheDocument();
     });
 
-    it("shows description and hides ticker for _MAN: holdings", async () => {
+    it("shows description and hides ticker for _SYN: manual holdings", async () => {
       const manualHoldingsWithOther = [
         {
           id: "h-man-1",
           account_snapshot_id: "acct-snap-1",
-          ticker: "_MAN:abc12345",
+          ticker: "_SYN:abc12345",
           security_name: "Primary Residence",
           quantity: "1",
           snapshot_price: "500000",
@@ -453,15 +453,15 @@ describe("AccountDetailsPage", () => {
       // Description should be shown
       expect(screen.getByText("Primary Residence")).toBeInTheDocument();
       // Synthetic ticker should NOT be shown
-      expect(screen.queryByText("_MAN:abc12345")).not.toBeInTheDocument();
+      expect(screen.queryByText("_SYN:abc12345")).not.toBeInTheDocument();
     });
 
-    it("shows description and hides ticker for _SF: holdings", async () => {
+    it("shows description and hides ticker for _SYN: provider holdings", async () => {
       const simplefinHoldingsWithSynthetic = [
         {
           id: "h-sf-1",
           account_snapshot_id: "acct-snap-1",
-          ticker: "_SF:xyz98765",
+          ticker: "_SYN:xyz98765",
           security_name: "Vanguard Target Trust 529",
           quantity: "100",
           snapshot_price: "150.50",
@@ -483,15 +483,15 @@ describe("AccountDetailsPage", () => {
       // Description should be shown
       expect(screen.getByText("Vanguard Target Trust 529")).toBeInTheDocument();
       // Synthetic ticker should NOT be shown
-      expect(screen.queryByText("_SF:xyz98765")).not.toBeInTheDocument();
+      expect(screen.queryByText("_SYN:xyz98765")).not.toBeInTheDocument();
     });
 
-    it("shows dash for quantity and price of _MAN: holdings", async () => {
+    it("shows dash for quantity and price of _SYN: holdings", async () => {
       const manualHoldingsWithOther = [
         {
           id: "h-man-1",
           account_snapshot_id: "acct-snap-1",
-          ticker: "_MAN:abc12345",
+          ticker: "_SYN:abc12345",
           security_name: "Primary Residence",
           quantity: "1",
           snapshot_price: "500000",

@@ -315,8 +315,8 @@ See [Schema Design Rationale](#schema-design-rationale) above for detailed discu
 
 ### 3. Synthetic Tickers
 
-Non-tradable assets (SimpleFIN manual holdings, brokerage cash) get synthetic tickers:
-- Format: `_SF:{hash}` (SimpleFIN), `_MAN:{hash}` (manual)
+Non-tradable assets (provider holdings without symbols, manual "Other" holdings) get synthetic tickers:
+- Format: `_SYN:{hash}` (unified prefix for all providers and manual holdings)
 - Allows treating all holdings uniformly in the database
 - Hidden from user in UI (detected via `isSyntheticTicker()` utility)
 
