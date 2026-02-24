@@ -325,9 +325,10 @@ class TestGetPriceHistory:
             return mock_resp
 
         with patch.object(client._client, "request", side_effect=mock_request):
-            result = client.get_price_history(
-                ["BTC", "ETH"], date(2024, 1, 15), date(2024, 1, 15)
-            )
+            with patch("integrations.coingecko_client.time_module.sleep"):
+                result = client.get_price_history(
+                    ["BTC", "ETH"], date(2024, 1, 15), date(2024, 1, 15)
+                )
 
         assert len(result["BTC"]) == 1
         assert result["BTC"][0].close_price == Decimal("42000.0")
@@ -411,6 +412,34 @@ class TestRateLimiting:
 
         assert len(result["BTC"]) == 1
         mock_sleep.assert_any_call(_MAX_RETRY_AFTER)
+
+    def test_retry_after_header_via_http_status_error(self, client):
+        """Retry-After is respected when 429 arrives as HTTPStatusError."""
+        rate_limit_response = MagicMock()
+        rate_limit_response.status_code = 429
+        rate_limit_response.headers = {"Retry-After": "15"}
+        rate_limit_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Rate limited", request=MagicMock(), response=rate_limit_response
+        )
+
+        success_response = MagicMock()
+        success_response.status_code = 200
+        success_response.json.return_value = _make_market_chart_response([
+            [_ts_ms(2024, 1, 15, 12), 42000.0],
+        ])
+        success_response.raise_for_status = MagicMock()
+
+        with patch.object(
+            client._client, "request",
+            side_effect=[rate_limit_response, success_response],
+        ):
+            with patch("integrations.coingecko_client.time_module.sleep") as mock_sleep:
+                result = client.get_price_history(
+                    ["BTC"], date(2024, 1, 15), date(2024, 1, 15)
+                )
+
+        assert len(result["BTC"]) == 1
+        mock_sleep.assert_any_call(15.0)
 
     def test_inter_request_delay_between_symbols(self, client):
         """Adds a delay between per-coin requests to avoid burst rate limits."""

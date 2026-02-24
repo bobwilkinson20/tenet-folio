@@ -149,7 +149,7 @@ class CoinGeckoClient:
         retry_after = response.headers.get("Retry-After")
         if retry_after is not None:
             try:
-                delay = min(float(retry_after), _MAX_RETRY_AFTER)
+                delay = min(float(retry_after), float(_MAX_RETRY_AFTER))
                 if delay > 0:
                     return delay
             except (ValueError, TypeError):
