@@ -203,7 +203,7 @@ export function AccountsTray({
                           {account.name}
                         </p>
                         {account.provider_name !== "Manual" && (
-                          <span className="px-1.5 py-0 rounded text-[10px] font-medium bg-tf-bg-elevated text-tf-text-tertiary flex-shrink-0" data-testid={`tray-provider-badge-${account.id}`}>
+                          <span className="px-1.5 rounded text-[10px] font-medium bg-tf-bg-elevated text-tf-text-tertiary flex-shrink-0" data-testid={`tray-provider-badge-${account.id}`}>
                             {account.provider_name}
                           </span>
                         )}
