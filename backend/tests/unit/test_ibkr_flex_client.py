@@ -1492,3 +1492,326 @@ class TestIBKRSyncAll:
         assert bd == datetime.datetime(
             2024, 12, 31, 0, 0, 0, tzinfo=datetime.timezone.utc
         )
+
+
+# ---------------------------------------------------------------------------
+# Sub-account and Paxos symbol normalization
+# ---------------------------------------------------------------------------
+
+
+class TestIBKRSubAccountNormalization:
+    """Tests for Paxos sub-account ID and ticker symbol normalization."""
+
+    # -- _normalize_account_id unit tests -----------------------------------
+
+    def test_normalize_account_id_no_suffix(self):
+        """Parent account ID returned unchanged."""
+        assert IBKRFlexClient._normalize_account_id(
+            "U1234567", {"U1234567"}
+        ) == "U1234567"
+
+    def test_normalize_account_id_paxos_suffix(self):
+        """-P sub-account maps to parent."""
+        assert IBKRFlexClient._normalize_account_id(
+            "U1234567-P", {"U1234567"}
+        ) == "U1234567"
+
+    def test_normalize_account_id_arbitrary_suffix(self):
+        """Arbitrary suffix (e.g. -X) also maps to parent."""
+        assert IBKRFlexClient._normalize_account_id(
+            "U1234567-X", {"U1234567"}
+        ) == "U1234567"
+
+    def test_normalize_account_id_unknown_sub_account(self):
+        """Sub-account with no matching parent is returned unchanged."""
+        assert IBKRFlexClient._normalize_account_id(
+            "U9999999-P", {"U1234567"}
+        ) == "U9999999-P"
+
+    def test_normalize_account_id_empty_parent_set(self):
+        """Empty parent set returns account_id unchanged."""
+        assert IBKRFlexClient._normalize_account_id(
+            "U1234567-P", set()
+        ) == "U1234567-P"
+
+    def test_normalize_account_id_multi_account_correct_parent(self):
+        """With multiple parents, sub-account matches the correct one."""
+        parents = {"U1111111", "U2222222"}
+        assert IBKRFlexClient._normalize_account_id(
+            "U2222222-P", parents
+        ) == "U2222222"
+        assert IBKRFlexClient._normalize_account_id(
+            "U1111111-Q", parents
+        ) == "U1111111"
+
+    # -- _normalize_symbol unit tests ---------------------------------------
+
+    def test_normalize_symbol_btc_paxos(self):
+        """BTC.USD-PAXOS -> BTC."""
+        assert IBKRFlexClient._normalize_symbol("BTC.USD-PAXOS") == "BTC"
+
+    def test_normalize_symbol_eth_paxos(self):
+        """ETH.USD-PAXOS -> ETH."""
+        assert IBKRFlexClient._normalize_symbol("ETH.USD-PAXOS") == "ETH"
+
+    def test_normalize_symbol_regular_ticker(self):
+        """Regular ticker (AAPL) unchanged."""
+        assert IBKRFlexClient._normalize_symbol("AAPL") == "AAPL"
+
+    def test_normalize_symbol_cash(self):
+        """Cash symbol (_CASH:USD) unchanged."""
+        assert IBKRFlexClient._normalize_symbol("_CASH:USD") == "_CASH:USD"
+
+    def test_normalize_symbol_none(self):
+        """None symbol returns None."""
+        assert IBKRFlexClient._normalize_symbol(None) is None
+
+    # -- _get_parent_account_ids unit test ----------------------------------
+
+    def test_get_parent_account_ids(self):
+        """Extracts unique accountIds from all FlexStatements."""
+        stmt1 = FlexStatement(
+            accountId="U1111111",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+        )
+        stmt2 = FlexStatement(
+            accountId="U2222222",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+        )
+        response = FlexQueryResponse(
+            queryName="Test", type="AF", FlexStatements=(stmt1, stmt2)
+        )
+        assert IBKRFlexClient._get_parent_account_ids(response) == {
+            "U1111111", "U2222222"
+        }
+
+    # -- Integration: get_holdings ------------------------------------------
+
+    def test_holdings_normalize_sub_account_and_paxos_symbol(
+        self, mock_configured_settings
+    ):
+        """Holdings with sub-account IDs and Paxos symbols are normalized."""
+        stmt = FlexStatement(
+            accountId="U1203437",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+            OpenPositions=(
+                OpenPosition(
+                    accountId="U1203437-P",
+                    symbol="BTC.USD-PAXOS",
+                    description="BITCOIN",
+                    position=Decimal("0.5"),
+                    markPrice=Decimal("60000"),
+                    positionValue=Decimal("30000"),
+                    currency="USD",
+                ),
+                OpenPosition(
+                    accountId="U1203437",
+                    symbol="AAPL",
+                    description="APPLE INC",
+                    position=Decimal("10"),
+                    markPrice=Decimal("175"),
+                    positionValue=Decimal("1750"),
+                    currency="USD",
+                ),
+            ),
+            CashReport=(
+                CashReportCurrency(
+                    accountId="U1203437-P",
+                    currency="USD",
+                    endingCash=Decimal("100.00"),
+                ),
+            ),
+        )
+        response = FlexQueryResponse(
+            queryName="Test", type="AF", FlexStatements=(stmt,)
+        )
+        ibkr = IBKRFlexClient()
+
+        with patch.object(ibkr, "_fetch_statement", return_value=response):
+            holdings = ibkr.get_holdings()
+
+        # All three holdings should have the parent account ID
+        assert all(h.account_id == "U1203437" for h in holdings)
+
+        # Paxos symbol normalized
+        btc = [h for h in holdings if h.name == "BITCOIN"][0]
+        assert btc.symbol == "BTC"
+
+        # Regular symbol unchanged
+        aapl = [h for h in holdings if h.name == "APPLE INC"][0]
+        assert aapl.symbol == "AAPL"
+
+    # -- Integration: get_activities ----------------------------------------
+
+    def test_activities_normalize_sub_account_and_paxos_ticker(
+        self, mock_configured_settings
+    ):
+        """Activities with sub-account IDs and Paxos tickers are normalized."""
+        stmt = FlexStatement(
+            accountId="U1203437",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+            Trades=(
+                Trade(
+                    accountId="U1203437-P",
+                    tradeID="T001",
+                    transactionID="TX001",
+                    symbol="ETH.USD-PAXOS",
+                    description="ETHEREUM",
+                    buySell=enums.BuySell.BUY,
+                    quantity=Decimal("2"),
+                    tradePrice=Decimal("3000"),
+                    netCash=Decimal("-6000"),
+                    currency="USD",
+                    tradeDate=datetime.date(2024, 3, 1),
+                    dateTime=None,
+                ),
+            ),
+            CashTransactions=(
+                CashTransaction(
+                    accountId="U1203437-P",
+                    transactionID="CT001",
+                    type=enums.CashAction.DEPOSITWITHDRAW,
+                    amount=Decimal("5000"),
+                    symbol="ETH.USD-PAXOS",
+                    currency="USD",
+                    description="CRYPTO DEPOSIT",
+                    dateTime=datetime.datetime(2024, 3, 2, 10, 0, 0),
+                ),
+            ),
+        )
+        response = FlexQueryResponse(
+            queryName="Test", type="AF", FlexStatements=(stmt,)
+        )
+        ibkr = IBKRFlexClient()
+
+        with patch.object(ibkr, "_fetch_statement", return_value=response):
+            activities = ibkr.get_activities()
+
+        assert len(activities) == 2
+        # Both activities should have normalized account ID and ticker
+        for act in activities:
+            assert act.account_id == "U1203437"
+            assert act.ticker == "ETH"
+
+    # -- Integration: sync_all ----------------------------------------------
+
+    def test_sync_all_normalizes_both(self, mock_configured_settings):
+        """End-to-end: sync_all normalizes account IDs and symbols."""
+        stmt = FlexStatement(
+            accountId="U1203437",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+            OpenPositions=(
+                OpenPosition(
+                    accountId="U1203437-P",
+                    symbol="BTC.USD-PAXOS",
+                    description="BITCOIN",
+                    position=Decimal("1"),
+                    markPrice=Decimal("60000"),
+                    positionValue=Decimal("60000"),
+                    currency="USD",
+                ),
+            ),
+            Trades=(
+                Trade(
+                    accountId="U1203437-P",
+                    tradeID="T100",
+                    transactionID="TX100",
+                    symbol="BTC.USD-PAXOS",
+                    description="BITCOIN",
+                    buySell=enums.BuySell.BUY,
+                    quantity=Decimal("1"),
+                    tradePrice=Decimal("55000"),
+                    netCash=Decimal("-55000"),
+                    currency="USD",
+                    tradeDate=datetime.date(2024, 2, 1),
+                    dateTime=None,
+                ),
+            ),
+        )
+        response = FlexQueryResponse(
+            queryName="Test", type="AF", FlexStatements=(stmt,)
+        )
+        ibkr = IBKRFlexClient()
+
+        with patch.object(ibkr, "_fetch_statement", return_value=response):
+            result = ibkr.sync_all()
+
+        assert result.errors == []
+        assert len(result.holdings) == 1
+        assert result.holdings[0].account_id == "U1203437"
+        assert result.holdings[0].symbol == "BTC"
+
+        assert len(result.activities) == 1
+        assert result.activities[0].account_id == "U1203437"
+        assert result.activities[0].ticker == "BTC"
+
+    # -- Multi-account: correct parent matching -----------------------------
+
+    def test_multi_account_sub_accounts_match_correct_parent(
+        self, mock_configured_settings
+    ):
+        """Sub-accounts from different parents are mapped correctly."""
+        stmt1 = FlexStatement(
+            accountId="U1111111",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+            OpenPositions=(
+                OpenPosition(
+                    accountId="U1111111-P",
+                    symbol="BTC.USD-PAXOS",
+                    description="BITCOIN",
+                    position=Decimal("1"),
+                    markPrice=Decimal("60000"),
+                    positionValue=Decimal("60000"),
+                    currency="USD",
+                ),
+            ),
+        )
+        stmt2 = FlexStatement(
+            accountId="U2222222",
+            fromDate=datetime.date(2024, 1, 1),
+            toDate=datetime.date(2024, 12, 31),
+            period="Last365CalendarDays",
+            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
+            OpenPositions=(
+                OpenPosition(
+                    accountId="U2222222-P",
+                    symbol="ETH.USD-PAXOS",
+                    description="ETHEREUM",
+                    position=Decimal("10"),
+                    markPrice=Decimal("3000"),
+                    positionValue=Decimal("30000"),
+                    currency="USD",
+                ),
+            ),
+        )
+        response = FlexQueryResponse(
+            queryName="Test", type="AF", FlexStatements=(stmt1, stmt2)
+        )
+        ibkr = IBKRFlexClient()
+
+        with patch.object(ibkr, "_fetch_statement", return_value=response):
+            holdings = ibkr.get_holdings()
+
+        assert len(holdings) == 2
+        btc = [h for h in holdings if h.symbol == "BTC"][0]
+        eth = [h for h in holdings if h.symbol == "ETH"][0]
+        assert btc.account_id == "U1111111"
+        assert eth.account_id == "U2222222"

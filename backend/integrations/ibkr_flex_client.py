@@ -7,6 +7,7 @@ Flex Query reports containing positions, cash balances, and trades.
 
 import dataclasses
 import logging
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -134,6 +135,41 @@ class IBKRFlexClient:
                 return f"Interactive Brokers {info.accountType} Account"
         return "Interactive Brokers Account"
 
+    @staticmethod
+    def _get_parent_account_ids(response: FlexQueryResponse) -> set[str]:
+        """Return the set of top-level account IDs from the Flex response."""
+        return {stmt.accountId for stmt in response.FlexStatements}
+
+    @staticmethod
+    def _normalize_account_id(account_id: str, parent_ids: set[str]) -> str:
+        """Map a sub-account ID back to its parent.
+
+        IBKR nests certain positions under sub-accounts (e.g. U1234567-P for
+        Paxos crypto).  If account_id already matches a parent, return it
+        unchanged.  Otherwise, check if it starts with ``{parent}-`` for any
+        known parent and return that parent.  Falls back to the original value.
+        """
+        if account_id in parent_ids:
+            return account_id
+        for parent in parent_ids:
+            if account_id.startswith(f"{parent}-"):
+                return parent
+        return account_id
+
+    _PAXOS_RE = re.compile(r"^([A-Z0-9]+)\.\w+-PAXOS$")
+
+    @staticmethod
+    def _normalize_symbol(symbol: str | None) -> str | None:
+        """Normalize IBKR Paxos crypto tickers to standard symbols.
+
+        E.g. ``BTC.USD-PAXOS`` → ``BTC``, ``ETH.USD-PAXOS`` → ``ETH``.
+        Non-matching symbols are returned unchanged.
+        """
+        if symbol is None:
+            return None
+        m = IBKRFlexClient._PAXOS_RE.match(symbol)
+        return m.group(1) if m else symbol
+
     def get_holdings(self, account_id: str | None = None) -> list[ProviderHolding]:
         """Fetch holdings from the Flex report.
 
@@ -151,6 +187,7 @@ class IBKRFlexClient:
         self, response: FlexQueryResponse, account_id: str | None = None
     ) -> list[ProviderHolding]:
         """Extract holdings from a parsed Flex response."""
+        parent_ids = self._get_parent_account_ids(response)
         holdings = []
         for stmt in response.FlexStatements:
             if account_id and stmt.accountId != account_id:
@@ -160,12 +197,19 @@ class IBKRFlexClient:
             for pos in stmt.OpenPositions:
                 holding = self._map_position(pos)
                 if holding:
+                    holding.account_id = self._normalize_account_id(
+                        holding.account_id, parent_ids
+                    )
+                    holding.symbol = self._normalize_symbol(holding.symbol)
                     holdings.append(holding)
 
             # Map CashReportCurrency to cash holdings
             for cash in stmt.CashReport:
                 holding = self._map_cash(cash)
                 if holding:
+                    holding.account_id = self._normalize_account_id(
+                        holding.account_id, parent_ids
+                    )
                     holdings.append(holding)
 
         return holdings
@@ -254,15 +298,24 @@ class IBKRFlexClient:
         self, response: FlexQueryResponse
     ) -> list[ProviderActivity]:
         """Extract activities from a parsed Flex response."""
+        parent_ids = self._get_parent_account_ids(response)
         activities = []
         for stmt in response.FlexStatements:
             for trade in stmt.Trades:
                 activity = self._map_trade(trade)
                 if activity:
+                    activity.account_id = self._normalize_account_id(
+                        activity.account_id, parent_ids
+                    )
+                    activity.ticker = self._normalize_symbol(activity.ticker)
                     activities.append(activity)
             for cash_tx in stmt.CashTransactions:
                 activity = self._map_cash_transaction(cash_tx)
                 if activity:
+                    activity.account_id = self._normalize_account_id(
+                        activity.account_id, parent_ids
+                    )
+                    activity.ticker = self._normalize_symbol(activity.ticker)
                     activities.append(activity)
         return activities
 
