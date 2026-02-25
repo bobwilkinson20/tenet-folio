@@ -1,5 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useTheme } from "@/hooks/useTheme";
+import { ThemeToggle } from "./ThemeToggle";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -7,6 +9,7 @@ export interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const { resolvedTheme } = useTheme();
 
   const navLinks = [
     { path: "/", label: "Dashboard" },
@@ -22,12 +25,12 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between">
             <Link to="/">
               <img
-                src="/lockup-h-dark.svg"
+                src={resolvedTheme === "light" ? "/lockup-h-light.svg" : "/lockup-h-dark.svg"}
                 alt="TenetFolio"
                 className="h-8"
               />
             </Link>
-            <nav className="flex gap-4">
+            <nav className="flex items-center gap-4">
               {navLinks.map((link) => (
                 <Link
                   key={link.path}
@@ -41,6 +44,9 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
+              <div className="ml-2 border-l border-tf-border-default pl-4">
+                <ThemeToggle />
+              </div>
             </nav>
           </div>
         </div>

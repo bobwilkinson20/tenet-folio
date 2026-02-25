@@ -1,7 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Layout } from "../../components/layout/Layout";
+
+let mockResolvedTheme = "dark" as "light" | "dark";
+
+vi.mock("@/hooks/useTheme", () => ({
+  useTheme: () => ({
+    theme: "system" as const,
+    resolvedTheme: mockResolvedTheme,
+    setTheme: vi.fn(),
+    loading: false,
+  }),
+}));
+
+vi.mock("@/components/layout/ThemeToggle", () => ({
+  ThemeToggle: () => <button aria-label="System theme">theme-toggle</button>,
+}));
 
 function renderLayout(initialRoute = "/") {
   return render(
@@ -14,12 +29,24 @@ function renderLayout(initialRoute = "/") {
 }
 
 describe("Layout", () => {
+  beforeEach(() => {
+    mockResolvedTheme = "dark";
+  });
+
   it("renders logo with correct alt text and src", () => {
     renderLayout();
 
     const logo = screen.getByAltText("TenetFolio");
     expect(logo).toBeInTheDocument();
     expect(logo).toHaveAttribute("src", "/lockup-h-dark.svg");
+  });
+
+  it("renders light logo when resolved theme is light", () => {
+    mockResolvedTheme = "light";
+    renderLayout();
+
+    const logo = screen.getByAltText("TenetFolio");
+    expect(logo).toHaveAttribute("src", "/lockup-h-light.svg");
   });
 
   it("logo links to /", () => {
@@ -70,5 +97,11 @@ describe("Layout", () => {
     renderLayout();
 
     expect(screen.getByText("TenetFolio")).toBeInTheDocument();
+  });
+
+  it("renders ThemeToggle", () => {
+    renderLayout();
+
+    expect(screen.getByRole("button", { name: "System theme" })).toBeInTheDocument();
   });
 });

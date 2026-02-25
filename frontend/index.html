@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        var t;
+        try { t = localStorage.getItem('tf-theme'); } catch(e) {}
+        if (!t) t = 'system';
+        if (t === 'system') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      })();
+    </script>
     <title>TenetFolio</title>
     <meta name="description" content="Sovereign financial architecture. Track holdings, asset allocation, and net worth across brokerage accounts." />
     <meta name="theme-color" content="#0f172a" />
