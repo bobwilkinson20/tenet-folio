@@ -661,11 +661,11 @@ describe("AccountList", () => {
         onDelete: mockDelete,
       });
 
-      expect(screen.getByTestId("manual-badge-acc-manual")).toBeInTheDocument();
-      expect(screen.getByTestId("manual-badge-acc-manual")).toHaveTextContent("Manual");
+      expect(screen.getByTestId("provider-badge-acc-manual")).toBeInTheDocument();
+      expect(screen.getByTestId("provider-badge-acc-manual")).toHaveTextContent("Manual");
     });
 
-    it("does not show Manual badge for non-manual accounts", () => {
+    it("shows provider badge with provider name for synced accounts", () => {
       renderAccountList({
         accounts: accountsWithManual,
         loading: false,
@@ -674,8 +674,29 @@ describe("AccountList", () => {
         onDelete: mockDelete,
       });
 
-      expect(screen.queryByTestId("manual-badge-acc-1")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("manual-badge-acc-2")).not.toBeInTheDocument();
+      // SnapTrade accounts show provider badge
+      expect(screen.getByTestId("provider-badge-acc-1")).toHaveTextContent("SnapTrade");
+      expect(screen.getByTestId("provider-badge-acc-3")).toHaveTextContent("SnapTrade");
+      // SimpleFIN account shows provider badge
+      expect(screen.getByTestId("provider-badge-acc-2")).toHaveTextContent("SimpleFIN");
+    });
+
+    it("uses muted styling for synced provider badges and blue for Manual", () => {
+      renderAccountList({
+        accounts: accountsWithManual,
+        loading: false,
+        onEdit: mockEdit,
+        onToggleActive: mockToggleActive,
+        onDelete: mockDelete,
+      });
+
+      const manualBadge = screen.getByTestId("provider-badge-acc-manual");
+      expect(manualBadge.className).toContain("bg-tf-info/10");
+      expect(manualBadge.className).toContain("text-tf-info");
+
+      const syncedBadge = screen.getByTestId("provider-badge-acc-1");
+      expect(syncedBadge.className).toContain("bg-tf-bg-elevated");
+      expect(syncedBadge.className).toContain("text-tf-text-secondary");
     });
 
     it("shows pin icon for manual accounts", () => {

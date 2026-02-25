@@ -201,6 +201,39 @@ describe("AccountsTray", () => {
     expect(titleEl?.textContent).toContain("Manual account");
   });
 
+  describe("provider badges", () => {
+    it("shows provider badge for synced accounts", () => {
+      renderTray(baseAccounts, true);
+
+      expect(screen.getByTestId("tray-provider-badge-acc-1")).toHaveTextContent("SnapTrade");
+      expect(screen.getByTestId("tray-provider-badge-acc-2")).toHaveTextContent("SnapTrade");
+      expect(screen.getByTestId("tray-provider-badge-acc-3")).toHaveTextContent("SimpleFIN");
+      expect(screen.getByTestId("tray-provider-badge-acc-4")).toHaveTextContent("SimpleFIN");
+    });
+
+    it("does not show provider badge for Manual accounts", () => {
+      const manualAccount: AccountSummary[] = [
+        {
+          id: "acc-manual",
+          name: "My House",
+          provider_name: "Manual",
+          institution_name: null,
+          value: "500000.00",
+          last_sync_time: null,
+          last_sync_status: null,
+          last_sync_error: null,
+          balance_date: "2026-01-15T00:00:00Z",
+          valuation_status: "ok",
+          valuation_date: "2026-01-15",
+        },
+      ];
+
+      renderTray(manualAccount, true);
+
+      expect(screen.queryByTestId("tray-provider-badge-acc-manual")).not.toBeInTheDocument();
+    });
+  });
+
   describe("account selection", () => {
     it("shows All and None buttons in header", () => {
       renderTray(baseAccounts, true);
