@@ -497,7 +497,10 @@ class PortfolioValuationService:
                         DailyHoldingValue.account_id == account.id,
                         DailyHoldingValue.valuation_date == latest_val_date,
                         DailyHoldingValue.price_date.isnot(None),
-                        ~DailyHoldingValue.ticker.startswith(SYNTHETIC_PREFIX),
+                        ~DailyHoldingValue.ticker.like(
+                            SYNTHETIC_PREFIX.replace("_", r"\_") + "%",
+                            escape="\\",
+                        ),
                     )
                 )
                 if sentinel_id:

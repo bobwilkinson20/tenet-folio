@@ -131,7 +131,10 @@ def get_dashboard(
                 DailyHoldingValue.price_date.isnot(None),
                 # Exclude synthetic tickers — non-tradable holdings (real
                 # estate, vehicles, etc.) have no market price to go stale.
-                ~DailyHoldingValue.ticker.startswith(SYNTHETIC_PREFIX),
+                ~DailyHoldingValue.ticker.like(
+                    SYNTHETIC_PREFIX.replace("_", r"\_") + "%",
+                    escape="\\",
+                ),
             )
         )
         if sentinel_id:
