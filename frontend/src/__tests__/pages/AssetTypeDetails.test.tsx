@@ -11,6 +11,15 @@ vi.mock("../../api/assetTypes", () => ({
 
 import { assetTypeApi } from "../../api/assetTypes";
 
+/** Default null lot fields for holdings without cost basis data. */
+const NO_LOTS = {
+  cost_basis: null,
+  gain_loss: null,
+  gain_loss_percent: null,
+  lot_coverage: null,
+  lot_count: null,
+} as const;
+
 const mockDetail = {
   asset_type_id: "at-1",
   asset_type_name: "US Stocks",
@@ -24,6 +33,7 @@ const mockDetail = {
       ticker: "VTI",
       security_name: "Vanguard Total Stock Market ETF",
       market_value: "15000.00",
+      ...NO_LOTS,
     },
     {
       holding_id: "h-2",
@@ -32,6 +42,7 @@ const mockDetail = {
       ticker: "AAPL",
       security_name: "Apple Inc.",
       market_value: "10000.00",
+      ...NO_LOTS,
     },
   ],
 };
@@ -132,6 +143,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "XYZ",
           security_name: null,
           market_value: "5000.00",
+          ...NO_LOTS,
         },
       ],
     };
@@ -204,6 +216,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "_SYN:abc123456789",
           security_name: "Primary Residence",
           market_value: "500000.00",
+          ...NO_LOTS,
         },
       ],
     };
@@ -238,6 +251,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "_SYN:xyz98765",
           security_name: "Vanguard Target Trust",
           market_value: "50000.00",
+          ...NO_LOTS,
         },
       ],
     };
@@ -287,6 +301,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "15000.00",
+          ...NO_LOTS,
         },
         {
           holding_id: "h-2",
@@ -295,6 +310,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "AAPL",
           security_name: "Apple Inc.",
           market_value: "10000.00",
+          ...NO_LOTS,
         },
         {
           holding_id: "h-3",
@@ -303,6 +319,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "10000.00",
+          ...NO_LOTS,
         },
       ],
     };
@@ -353,6 +370,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "5000.00",
+          ...NO_LOTS,
         },
         {
           holding_id: "h-2",
@@ -361,6 +379,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "20000.00",
+          ...NO_LOTS,
         },
         {
           holding_id: "h-3",
@@ -369,6 +388,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "AAPL",
           security_name: "Apple Inc.",
           market_value: "15000.00",
+          ...NO_LOTS,
         },
       ],
     };
@@ -401,6 +421,209 @@ describe("AssetTypeDetailsPage", () => {
     expect(rows[4]).toHaveTextContent("Mid Account");
   });
 
+  it("hides cost basis columns when no holdings have lots", async () => {
+    vi.mocked(assetTypeApi.getHoldings).mockResolvedValue({ data: mockDetail } as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("US Stocks")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Cost Basis")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gain/Loss")).not.toBeInTheDocument();
+  });
+
+  it("shows cost basis columns when lots exist", async () => {
+    const detailWithLots = {
+      ...mockDetail,
+      holdings: [
+        {
+          holding_id: "h-1",
+          account_id: "acc-1",
+          account_name: "Vanguard Brokerage",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "15000.00",
+          cost_basis: "9500.00",
+          gain_loss: "5500.00",
+          gain_loss_percent: "0.5789",
+          lot_coverage: "1",
+          lot_count: 2,
+        },
+        {
+          holding_id: "h-2",
+          account_id: "acc-2",
+          account_name: "Fidelity 401k",
+          ticker: "AAPL",
+          security_name: "Apple Inc.",
+          market_value: "10000.00",
+          cost_basis: null,
+          gain_loss: null,
+          gain_loss_percent: null,
+          lot_coverage: null,
+          lot_count: null,
+        },
+      ],
+    };
+    vi.mocked(assetTypeApi.getHoldings).mockResolvedValue({ data: detailWithLots } as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cost Basis")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Gain/Loss")).toBeInTheDocument();
+
+    const rows = screen.getAllByRole("row");
+    // Row 0: header, Row 1: VTI, Row 2: AAPL
+    expect(rows[1]).toHaveTextContent("$9,500.00"); // cost basis
+    expect(rows[1]).toHaveTextContent("$5,500.00"); // gain/loss
+    expect(rows[1]).toHaveTextContent("+57.9%"); // gain/loss percent
+    // AAPL row should show dashes for cost basis/gain loss
+    const aaplCells = rows[2].querySelectorAll("td");
+    expect(aaplCells[4].textContent).toBe("-"); // cost basis cell
+    expect(aaplCells[5].textContent).toBe("-"); // gain/loss cell
+  });
+
+  it("shows aggregate cost basis in multi-account group header", async () => {
+    const multiAccountWithLots = {
+      ...mockDetail,
+      total_value: "30000.00",
+      holdings: [
+        {
+          holding_id: "h-1",
+          account_id: "acc-1",
+          account_name: "Vanguard Brokerage",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "20000.00",
+          cost_basis: "12000.00",
+          gain_loss: "8000.00",
+          gain_loss_percent: "0.6667",
+          lot_coverage: "1",
+          lot_count: 1,
+        },
+        {
+          holding_id: "h-2",
+          account_id: "acc-2",
+          account_name: "Fidelity 401k",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "10000.00",
+          cost_basis: "8000.00",
+          gain_loss: "2000.00",
+          gain_loss_percent: "0.25",
+          lot_coverage: "1",
+          lot_count: 1,
+        },
+      ],
+    };
+    vi.mocked(assetTypeApi.getHoldings).mockResolvedValue({ data: multiAccountWithLots } as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("VTI")).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByRole("row");
+    // Row 0: header, Row 1: VTI group header, Row 2: Vanguard, Row 3: Fidelity
+    // Group header should show summed cost basis: $12,000 + $8,000 = $20,000
+    expect(rows[1]).toHaveTextContent("$20,000.00");
+    // Group header gain/loss percent: 10000/20000 = 50%
+    expect(rows[1]).toHaveTextContent("+50.0%");
+    // Individual rows should show their own cost basis
+    expect(rows[2]).toHaveTextContent("$12,000.00");
+    expect(rows[3]).toHaveTextContent("$8,000.00");
+  });
+
+  it("shows partial lot coverage indicator", async () => {
+    const detailWithPartial = {
+      ...mockDetail,
+      holdings: [
+        {
+          holding_id: "h-1",
+          account_id: "acc-1",
+          account_name: "Vanguard Brokerage",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "15000.00",
+          cost_basis: "5000.00",
+          gain_loss: "1000.00",
+          gain_loss_percent: "0.2",
+          lot_coverage: "0.6",
+          lot_count: 1,
+        },
+      ],
+    };
+    vi.mocked(assetTypeApi.getHoldings).mockResolvedValue({ data: detailWithPartial } as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cost Basis")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("~60% tracked")).toBeInTheDocument();
+  });
+
+  it("shows aggregate from only accounts with lots in mixed group", async () => {
+    const mixedGroupDetail = {
+      ...mockDetail,
+      total_value: "30000.00",
+      holdings: [
+        {
+          holding_id: "h-1",
+          account_id: "acc-1",
+          account_name: "Account With Lots",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "20000.00",
+          cost_basis: "15000.00",
+          gain_loss: "5000.00",
+          gain_loss_percent: "0.3333",
+          lot_coverage: "1",
+          lot_count: 2,
+        },
+        {
+          holding_id: "h-2",
+          account_id: "acc-2",
+          account_name: "Account Without Lots",
+          ticker: "VTI",
+          security_name: "Vanguard Total Stock Market ETF",
+          market_value: "10000.00",
+          ...NO_LOTS,
+        },
+      ],
+    };
+    vi.mocked(assetTypeApi.getHoldings).mockResolvedValue({ data: mixedGroupDetail } as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Cost Basis")).toBeInTheDocument();
+    });
+
+    const rows = screen.getAllByRole("row");
+    // Row 0: header, Row 1: VTI group header, Row 2: Account With Lots, Row 3: Account Without Lots
+    expect(rows).toHaveLength(4);
+
+    // Group header aggregates only from the account with lots
+    expect(rows[1]).toHaveTextContent("$15,000.00"); // cost basis from acc-1 only
+    expect(rows[1]).toHaveTextContent("$5,000.00"); // gain/loss from acc-1 only
+    expect(rows[1]).toHaveTextContent("+33.3%");
+
+    // Account with lots shows its cost basis
+    expect(rows[2]).toHaveTextContent("$15,000.00");
+
+    // Account without lots shows dash
+    const noLotCells = rows[3].querySelectorAll("td");
+    expect(noLotCells[4].textContent).toBe("-");
+    expect(noLotCells[5].textContent).toBe("-");
+  });
+
   it("group header shows bold styling for multi-holding groups", async () => {
     const multiHoldingDetail = {
       ...mockDetail,
@@ -412,6 +635,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "15000.00",
+          ...NO_LOTS,
         },
         {
           holding_id: "h-2",
@@ -420,6 +644,7 @@ describe("AssetTypeDetailsPage", () => {
           ticker: "VTI",
           security_name: "Vanguard Total Stock Market ETF",
           market_value: "10000.00",
+          ...NO_LOTS,
         },
       ],
     };
