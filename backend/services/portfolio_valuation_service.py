@@ -1126,7 +1126,7 @@ class PortfolioValuationService:
 
         for dhv in stored_rows:
             # Skip cash, sentinels, synthetic tickers
-            if is_cash_equivalent(dhv.ticker, dhv.close_price):
+            if dhv.ticker.upper() in CASH_TICKERS or dhv.ticker.startswith("_CASH:"):
                 continue
             if dhv.ticker == ZERO_BALANCE_TICKER:
                 continue

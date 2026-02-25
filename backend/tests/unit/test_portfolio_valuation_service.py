@@ -2985,6 +2985,21 @@ class TestPriceGuards:
         assert "Price guard" in caplog.text
         assert "non-positive" in caplog.text
 
+    def test_carry_forward_spike_rejected(self):
+        """A carry-forward price outside the ratio band triggers snapshot fallback."""
+        price_info = PriceWithDate(
+            Decimal("15000"), date(2025, 1, 6), PRICE_SOURCE_CARRY_FORWARD
+        )
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"),
+            snapshot_effective_date=date(2025, 1, 5),
+            prior_close=Decimal("150"),
+        )
+        # 100x spike rejected — falls back to snapshot
+        assert result.price == Decimal("150")
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
 
 # ---------------------------------------------------------------------------
 # Tests: Retrospective Validation
@@ -3449,6 +3464,55 @@ class TestRetrospectiveValidation:
         # First backfill — no prior rows to correct
         assert result.corrections == 0
 
+    def test_already_corrected_rows_are_not_recorrected(self, db: Session):
+        """Rows with PRICE_SOURCE_CORRECTED are skipped to prevent re-correction loops."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        # Pre-existing DHV row already corrected in a prior run
+        security = get_or_create_security(db, "AAPL")
+        db.add(DailyHoldingValue(
+            valuation_date=retro_date,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("148"),
+            market_value=Decimal("1480"),
+            price_source=PRICE_SOURCE_CORRECTED,
+        ))
+        db.commit()
+
+        # Backfill with different market data — the corrected row should NOT change
+        prices = {
+            "AAPL": {
+                retro_date: Decimal("152"),
+                yesterday - timedelta(days=1): Decimal("153"),
+                yesterday: Decimal("155"),
+            }
+        }
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        # The corrected row should be untouched
+        corrected_row = (
+            db.query(DailyHoldingValue)
+            .filter(
+                DailyHoldingValue.valuation_date == retro_date,
+                DailyHoldingValue.ticker == "AAPL",
+            )
+            .first()
+        )
+        assert corrected_row.close_price == Decimal("148")  # unchanged
+        assert corrected_row.price_source == PRICE_SOURCE_CORRECTED
+
 
 # ---------------------------------------------------------------------------
 # Tests: End-to-End
@@ -3505,6 +3569,34 @@ class TestEndToEnd:
         )
         assert day_before_row.close_price == Decimal("150")  # snapshot fallback
         assert day_before_row.price_source == PRICE_SOURCE_SNAPSHOT
+
+        # Second backfill: delete yesterday's row so the backfill has work to do.
+        # When it recalculates yesterday, retro validation looks back 7 days
+        # and will correct the snapshot-sourced day_before row.
+        yesterday_row = (
+            db.query(DailyHoldingValue)
+            .filter(
+                DailyHoldingValue.valuation_date == yesterday,
+                DailyHoldingValue.ticker == "AAPL",
+            )
+            .first()
+        )
+        if yesterday_row:
+            db.delete(yesterday_row)
+            db.commit()
+
+        correct_prices = {
+            "AAPL": {
+                day_before: Decimal("152"),  # correct price now available
+                yesterday: Decimal("155"),
+            }
+        }
+        service2 = _make_mock_service(correct_prices)
+        service2.backfill(db)
+
+        db.refresh(day_before_row)
+        assert day_before_row.close_price == Decimal("152")
+        assert day_before_row.price_source == PRICE_SOURCE_CORRECTED
 
     def test_all_price_sources_set_correctly(self, db: Session):
         """All DHV rows get appropriate price_source values."""
