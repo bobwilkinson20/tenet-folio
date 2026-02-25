@@ -32,7 +32,66 @@
   --warning: #f59e0b;
   --info: #3b82f6;
   --neutral: #64748b;
+}
 
+/* ── Light Mode Overrides ── */
+/*
+ * Both :root vars (--bg-primary etc.) and Tailwind @theme vars (--color-tf-bg-primary etc.)
+ * must be overridden. The :root vars are referenced directly by Recharts and other inline
+ * var() usage. The --color-tf-* vars override the Tailwind-generated utility classes
+ * (e.g. bg-tf-bg-surface), which resolve at build time from the @theme block but can
+ * still be overridden at runtime via CSS custom properties.
+ */
+[data-theme="light"] {
+  /* :root overrides */
+  --bg-primary:     #f8fafc;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #f1f5f9;
+  --bg-overlay:     rgba(0, 0, 0, 0.3);
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary:  #94a3b8;
+  --text-muted:     #cbd5e1;
+  --border-subtle:  rgba(15, 23, 42, 0.06);
+  --border-default: rgba(15, 23, 42, 0.12);
+  --border-strong:  rgba(15, 23, 42, 0.20);
+  --accent-primary:   #059669;
+  --accent-hover:     #10b981;
+  --accent-muted:     rgba(5, 150, 105, 0.08);
+  --accent-border:    rgba(5, 150, 105, 0.15);
+  --accent-on-light:  #059669;
+  --positive:   #059669;
+  --negative:   #dc2626;
+  --warning:    #d97706;
+  --info:       #2563eb;
+  --neutral:    #6b7280;
+
+  /* Tailwind @theme overrides */
+  --color-tf-bg-primary:     #f8fafc;
+  --color-tf-bg-surface:     #ffffff;
+  --color-tf-bg-elevated:    #f1f5f9;
+  --color-tf-bg-overlay:     rgba(0, 0, 0, 0.3);
+  --color-tf-text-primary:   #0f172a;
+  --color-tf-text-secondary: #475569;
+  --color-tf-text-tertiary:  #94a3b8;
+  --color-tf-text-muted:     #cbd5e1;
+  --color-tf-border-subtle:  rgba(15, 23, 42, 0.06);
+  --color-tf-border-default: rgba(15, 23, 42, 0.12);
+  --color-tf-border-strong:  rgba(15, 23, 42, 0.20);
+  --color-tf-accent-primary: #059669;
+  --color-tf-accent-hover:   #10b981;
+  --color-tf-accent-muted:   rgba(5, 150, 105, 0.08);
+  --color-tf-accent-border:  rgba(5, 150, 105, 0.15);
+  --color-tf-positive:       #059669;
+  --color-tf-negative:       #dc2626;
+  --color-tf-warning:        #d97706;
+  --color-tf-info:           #2563eb;
+  --color-tf-neutral:        #6b7280;
+
+  color-scheme: light;
+}
+
+:root {
   /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
@@ -93,6 +152,7 @@
 html {
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  color-scheme: dark;
 }
 
 body {
