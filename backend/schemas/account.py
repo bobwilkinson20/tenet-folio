@@ -211,6 +211,13 @@ class AssetTypeHoldingResponse(BaseModel):
     security_name: Optional[str] = None
     market_value: Decimal
 
+    # Cost basis fields (populated from lot data when available)
+    cost_basis: Decimal | None = None
+    gain_loss: Decimal | None = None
+    gain_loss_percent: Decimal | None = None
+    lot_coverage: Decimal | None = None
+    lot_count: int | None = None
+
 
 class AssetTypeHoldingsDetail(BaseModel):
     """Schema for asset type detail with its holdings."""

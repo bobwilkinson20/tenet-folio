@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from models import Account, AccountSnapshot, DailyHoldingValue, Holding, SyncSession
 from services.classification_service import ClassificationService
+from services.lot_ledger_service import LotLedgerService
 from utils.ticker import ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)
@@ -536,8 +537,15 @@ class PortfolioService:
                         "ticker": dhv.ticker,
                         "security_name": dhv.security.name if dhv.security else None,
                         "market_value": dhv.market_value,
+                        # Store DHV data for lot lookups (not leaked to response)
+                        "_security_id": dhv.security_id,
+                        "_close_price": dhv.close_price,
+                        "_quantity": dhv.quantity,
                     }
                 )
+
+        # Enrich with lot data
+        self._enrich_with_lot_data(db, result)
 
         logger.info(
             "Found %d holdings for asset type %s",
@@ -545,3 +553,55 @@ class PortfolioService:
             asset_type_id,
         )
         return result
+
+    @staticmethod
+    def _enrich_with_lot_data(db: Session, holdings: list[dict]) -> None:
+        """Enrich holding dicts with cost basis data from lot ledger.
+
+        Modifies holdings in-place. Groups by account_id and calls
+        LotLedgerService once per unique account.
+        """
+        if not holdings:
+            return
+
+        # Group holdings by account_id
+        by_account: dict[str, list[dict]] = {}
+        for h in holdings:
+            by_account.setdefault(h["account_id"], []).append(h)
+
+        for account_id, account_holdings in by_account.items():
+            # Build market_prices and total_quantities from stored DHV data
+            market_prices: dict[str, Decimal] = {}
+            total_quantities: dict[str, Decimal] = {}
+            for h in account_holdings:
+                sid = h["_security_id"]
+                if h["_close_price"] is not None:
+                    market_prices[sid] = h["_close_price"]
+                if h["_quantity"] is not None:
+                    total_quantities[sid] = h["_quantity"]
+
+            lot_summaries = LotLedgerService.get_lot_summaries_for_account(
+                db, account_id,
+                market_prices=market_prices,
+                total_quantities=total_quantities,
+            )
+
+            for h in account_holdings:
+                lot_summary = lot_summaries.get(h["_security_id"])
+                if lot_summary and lot_summary["lot_count"] > 0:
+                    cost_basis = lot_summary["total_cost_basis"]
+                    unrealized = lot_summary.get("unrealized_gain_loss")
+                    h["cost_basis"] = cost_basis
+                    h["gain_loss"] = unrealized
+                    h["lot_coverage"] = lot_summary.get("lot_coverage")
+                    h["lot_count"] = lot_summary["lot_count"]
+                    if unrealized is not None and cost_basis and cost_basis != 0:
+                        h["gain_loss_percent"] = unrealized / cost_basis
+                    else:
+                        h["gain_loss_percent"] = None
+
+        # Clean up internal keys
+        for h in holdings:
+            del h["_security_id"]
+            del h["_close_price"]
+            del h["_quantity"]

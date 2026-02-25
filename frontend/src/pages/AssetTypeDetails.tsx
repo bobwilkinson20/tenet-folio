@@ -2,7 +2,19 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { assetTypeApi } from "../api/assetTypes";
 import { isSyntheticTicker } from "@/utils/ticker";
+import { formatCurrency } from "@/utils/format";
 import type { AssetTypeHolding, AssetTypeHoldingsDetail } from "../types/assetType";
+
+interface HoldingGroup {
+  ticker: string;
+  securityName: string | null;
+  totalValue: number;
+  totalCostBasis: number | null;
+  totalGainLoss: number | null;
+  groupGainLossPercent: number | null;
+  minLotCoverage: number | null;
+  holdings: AssetTypeHolding[];
+}
 
 export function AssetTypeDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,9 +41,14 @@ export function AssetTypeDetailsPage() {
     fetchData();
   }, [fetchData]);
 
+  const hasCostBasis = useMemo(() => {
+    if (!data) return false;
+    return data.holdings.some((h) => h.lot_count != null && h.lot_count > 0);
+  }, [data]);
+
   const groupedHoldings = useMemo(() => {
     if (!data) return [];
-    const groups = new Map<string, { ticker: string; securityName: string | null; totalValue: number; holdings: AssetTypeHolding[] }>();
+    const groups = new Map<string, HoldingGroup>();
 
     for (const h of data.holdings) {
       const existing = groups.get(h.ticker);
@@ -43,8 +60,45 @@ export function AssetTypeDetailsPage() {
           ticker: h.ticker,
           securityName: h.security_name,
           totalValue: parseFloat(h.market_value),
+          totalCostBasis: null,
+          totalGainLoss: null,
+          groupGainLossPercent: null,
+          minLotCoverage: null,
           holdings: [h],
         });
+      }
+    }
+
+    // Compute aggregate lot fields per group
+    for (const group of groups.values()) {
+      let hasCb = false;
+      let costBasisSum = 0;
+      let gainLossSum = 0;
+      let minCoverage: number | null = null;
+
+      for (const h of group.holdings) {
+        if (h.lot_count != null && h.lot_count > 0 && h.cost_basis != null) {
+          hasCb = true;
+          costBasisSum += Number(h.cost_basis);
+          if (h.gain_loss != null) {
+            gainLossSum += Number(h.gain_loss);
+          }
+          if (h.lot_coverage != null) {
+            const cov = Number(h.lot_coverage);
+            if (minCoverage === null || cov < minCoverage) {
+              minCoverage = cov;
+            }
+          }
+        }
+      }
+
+      if (hasCb) {
+        group.totalCostBasis = costBasisSum;
+        group.totalGainLoss = gainLossSum;
+        group.minLotCoverage = minCoverage;
+        if (costBasisSum !== 0) {
+          group.groupGainLossPercent = gainLossSum / costBasisSum;
+        }
       }
     }
 
@@ -52,6 +106,8 @@ export function AssetTypeDetailsPage() {
       .sort((a, b) => b.totalValue - a.totalValue)
       .map(g => ({ ...g, holdings: g.holdings.sort((a, b) => parseFloat(b.market_value) - parseFloat(a.market_value)) }));
   }, [data]);
+
+  const colCount = hasCostBasis ? 6 : 4;
 
   if (loading) {
     return <div className="p-8">Loading...</div>;
@@ -100,72 +156,39 @@ export function AssetTypeDetailsPage() {
               <th className="px-6 py-3 text-right text-xs font-medium text-tf-text-tertiary uppercase">
                 Value
               </th>
+              {hasCostBasis && (
+                <>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-tf-text-tertiary uppercase">
+                    Cost Basis
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-tf-text-tertiary uppercase">
+                    Gain/Loss
+                  </th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-tf-border-subtle">
             {groupedHoldings.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-tf-text-tertiary">
+                <td colSpan={colCount} className="px-6 py-4 text-center text-tf-text-tertiary">
                   No holdings found.
                 </td>
               </tr>
             ) : (
               groupedHoldings.map((group) =>
                 group.holdings.length === 1 ? (
-                  <tr key={group.ticker}>
-                    <td className="px-6 py-4 text-sm font-medium text-tf-text-primary">
-                      {isSyntheticTicker(group.ticker) ? "—" : group.ticker}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-tf-text-primary">
-                      {group.securityName || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-tf-accent-primary">
-                      <Link to={`/accounts/${group.holdings[0].account_id}`} className="hover:underline">
-                        {group.holdings[0].account_name}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-tf-text-primary">
-                      ${group.totalValue.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                  </tr>
+                  <SingleHoldingRow
+                    key={group.ticker}
+                    group={group}
+                    hasCostBasis={hasCostBasis}
+                  />
                 ) : (
-                  <Fragment key={group.ticker}>
-                    <tr className="bg-tf-bg-secondary">
-                      <td className="px-6 py-3 text-sm font-bold text-tf-text-primary">
-                        {isSyntheticTicker(group.ticker) ? "—" : group.ticker}
-                      </td>
-                      <td className="px-6 py-3 text-sm font-bold text-tf-text-primary">
-                        {group.securityName || "—"}
-                      </td>
-                      <td className="px-6 py-3 text-sm text-tf-text-tertiary">All accounts</td>
-                      <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-bold text-tf-text-primary">
-                        ${group.totalValue.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </td>
-                    </tr>
-                    {group.holdings.map((h) => (
-                      <tr key={h.holding_id}>
-                        <td className="px-6 py-4 text-sm text-tf-text-primary"></td>
-                        <td className="px-6 py-4 text-sm text-tf-text-tertiary"></td>
-                        <td className="px-6 py-4 text-sm text-tf-accent-primary">
-                          <Link to={`/accounts/${h.account_id}`} className="hover:underline">
-                            {h.account_name}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-tf-text-primary">
-                          ${parseFloat(h.market_value).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </Fragment>
+                  <MultiHoldingGroup
+                    key={group.ticker}
+                    group={group}
+                    hasCostBasis={hasCostBasis}
+                  />
                 )
               )
             )}
@@ -173,5 +196,151 @@ export function AssetTypeDetailsPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+function CostBasisCell({ costBasis, lotCoverage, lotCount }: {
+  costBasis?: string | null;
+  lotCoverage?: string | number | null;
+  lotCount?: number | null;
+}) {
+  if (lotCount == null || lotCount <= 0) {
+    return <span className="text-tf-text-tertiary">-</span>;
+  }
+  return (
+    <div>
+      <div>{formatCurrency(costBasis)}</div>
+      {lotCoverage != null && Number(lotCoverage) < 1 && (
+        <div className="text-xs text-tf-text-tertiary">
+          ~{Math.round(Number(lotCoverage) * 100)}% tracked
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GainLossCell({ gainLoss, gainLossPercent, lotCount }: {
+  gainLoss?: string | number | null;
+  gainLossPercent?: string | number | null;
+  lotCount?: number | null;
+}) {
+  if (lotCount == null || lotCount <= 0 || gainLoss == null) {
+    return <span className="text-tf-text-tertiary">-</span>;
+  }
+  const glNum = Number(gainLoss);
+  return (
+    <div>
+      <div className={glNum >= 0 ? "text-tf-positive" : "text-tf-negative"}>
+        {typeof gainLoss === "number" ? formatCurrency(gainLoss) : formatCurrency(gainLoss)}
+      </div>
+      {gainLossPercent != null && (
+        <div className={`text-xs ${Number(gainLossPercent) >= 0 ? "text-tf-positive" : "text-tf-negative"}`}>
+          {Number(gainLossPercent) >= 0 ? "+" : ""}
+          {(Number(gainLossPercent) * 100).toFixed(1)}%
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SingleHoldingRow({ group, hasCostBasis }: { group: HoldingGroup; hasCostBasis: boolean }) {
+  const h = group.holdings[0];
+  return (
+    <tr key={group.ticker}>
+      <td className="px-6 py-4 text-sm font-medium text-tf-text-primary">
+        {isSyntheticTicker(group.ticker) ? "\u2014" : group.ticker}
+      </td>
+      <td className="px-6 py-4 text-sm text-tf-text-primary">
+        {group.securityName || "\u2014"}
+      </td>
+      <td className="px-6 py-4 text-sm text-tf-accent-primary">
+        <Link to={`/accounts/${h.account_id}`} className="hover:underline">
+          {h.account_name}
+        </Link>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-tf-text-primary">
+        ${group.totalValue.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}
+      </td>
+      {hasCostBasis && (
+        <>
+          <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-tf-text-primary">
+            <CostBasisCell costBasis={h.cost_basis} lotCoverage={h.lot_coverage} lotCount={h.lot_count} />
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+            <GainLossCell gainLoss={h.gain_loss} gainLossPercent={h.gain_loss_percent} lotCount={h.lot_count} />
+          </td>
+        </>
+      )}
+    </tr>
+  );
+}
+
+function MultiHoldingGroup({ group, hasCostBasis }: { group: HoldingGroup; hasCostBasis: boolean }) {
+  return (
+    <Fragment key={group.ticker}>
+      <tr className="bg-tf-bg-secondary">
+        <td className="px-6 py-3 text-sm font-bold text-tf-text-primary">
+          {isSyntheticTicker(group.ticker) ? "\u2014" : group.ticker}
+        </td>
+        <td className="px-6 py-3 text-sm font-bold text-tf-text-primary">
+          {group.securityName || "\u2014"}
+        </td>
+        <td className="px-6 py-3 text-sm text-tf-text-tertiary">All accounts</td>
+        <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-bold text-tf-text-primary">
+          ${group.totalValue.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </td>
+        {hasCostBasis && (
+          <>
+            <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-bold text-tf-text-primary">
+              <CostBasisCell
+                costBasis={group.totalCostBasis != null ? String(group.totalCostBasis) : null}
+                lotCoverage={group.minLotCoverage}
+                lotCount={group.totalCostBasis != null ? 1 : null}
+              />
+            </td>
+            <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-bold">
+              <GainLossCell
+                gainLoss={group.totalGainLoss}
+                gainLossPercent={group.groupGainLossPercent}
+                lotCount={group.totalCostBasis != null ? 1 : null}
+              />
+            </td>
+          </>
+        )}
+      </tr>
+      {group.holdings.map((h) => (
+        <tr key={h.holding_id}>
+          <td className="px-6 py-4 text-sm text-tf-text-primary"></td>
+          <td className="px-6 py-4 text-sm text-tf-text-tertiary"></td>
+          <td className="px-6 py-4 text-sm text-tf-accent-primary">
+            <Link to={`/accounts/${h.account_id}`} className="hover:underline">
+              {h.account_name}
+            </Link>
+          </td>
+          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-tf-text-primary">
+            ${parseFloat(h.market_value).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </td>
+          {hasCostBasis && (
+            <>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-tf-text-primary">
+                <CostBasisCell costBasis={h.cost_basis} lotCoverage={h.lot_coverage} lotCount={h.lot_count} />
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                <GainLossCell gainLoss={h.gain_loss} gainLossPercent={h.gain_loss_percent} lotCount={h.lot_count} />
+              </td>
+            </>
+          )}
+        </tr>
+      ))}
+    </Fragment>
   );
 }

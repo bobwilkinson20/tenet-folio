@@ -134,6 +134,11 @@ def get_asset_type_holdings(
             ticker=h["ticker"],
             security_name=h["security_name"],
             market_value=h["market_value"],
+            cost_basis=h.get("cost_basis"),
+            gain_loss=h.get("gain_loss"),
+            gain_loss_percent=h.get("gain_loss_percent"),
+            lot_coverage=h.get("lot_coverage"),
+            lot_count=h.get("lot_count"),
         )
         for h in holdings_data
     ]
