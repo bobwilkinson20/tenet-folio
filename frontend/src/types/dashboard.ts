@@ -12,6 +12,8 @@ export interface AccountSummary {
   // Per-account valuation health
   valuation_status: "ok" | "partial" | "missing" | "stale" | null;
   valuation_date: string | null; // ISO date (YYYY-MM-DD)
+  // Stale carry-forward price count (holdings using price data > 7 days old)
+  stale_price_count: number;
 }
 
 export interface AllocationData {

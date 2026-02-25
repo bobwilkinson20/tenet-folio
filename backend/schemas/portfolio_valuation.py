@@ -32,6 +32,17 @@ class PortfolioValueHistoryResponse(BaseModel):
     series: Optional[dict[str, SeriesData]] = None
 
 
+class StalePriceInfo(BaseModel):
+    """Details of a holding using a stale carry-forward price."""
+
+    ticker: str
+    security_name: Optional[str] = None
+    price_date: date
+    age_days: int
+    close_price: Decimal
+    market_value: Decimal
+
+
 class AccountDHVDiagnostic(BaseModel):
     """Per-account DHV gap analysis."""
 
@@ -45,6 +56,8 @@ class AccountDHVDiagnostic(BaseModel):
     missing_dates: list[str]
     partial_days: int = 0
     partial_dates: list[str] = []
+    stale_price_count: int = 0
+    stale_prices: list[StalePriceInfo] = []
 
 
 class DHVDiagnosticsResponse(BaseModel):
@@ -53,3 +66,4 @@ class DHVDiagnosticsResponse(BaseModel):
     accounts: list[AccountDHVDiagnostic]
     total_missing_days: int
     total_partial_days: int = 0
+    total_stale_price_count: int = 0

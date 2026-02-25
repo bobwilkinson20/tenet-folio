@@ -7,13 +7,17 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Account, AssetClass
+from models import Account, AssetClass, DailyHoldingValue
+from models.security import Security
 from services.classification_service import ClassificationService
 from services.portfolio_service import PortfolioService
+from services.portfolio_valuation_service import STALE_PRICE_DAYS
 from utils.query_params import parse_account_ids
+from utils.ticker import SYNTHETIC_PREFIX, ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,8 @@ class AccountSummary(BaseModel):
     # Per-account valuation health
     valuation_status: Optional[Literal["ok", "partial", "missing", "stale"]] = None
     valuation_date: Optional[str] = None  # ISO date (YYYY-MM-DD)
+    # Stale carry-forward price count (holdings using price data > 7 days old)
+    stale_price_count: int = 0
 
 
 class AllocationData(BaseModel):
@@ -92,6 +98,57 @@ def get_dashboard(
     active_account_ids = [a.id for a in active_accounts]
     valuation_statuses = portfolio_service.get_valuation_status(db, active_account_ids) if active_account_ids else {}
 
+    # Compute stale carry-forward price counts per account.
+    # For each account, find DHV rows on the latest valuation date where
+    # price_date is more than STALE_PRICE_DAYS behind the valuation_date.
+    stale_counts: dict[str, int] = {}
+    if active_account_ids:
+        sentinel_sec = db.query(Security).filter_by(ticker=ZERO_BALANCE_TICKER).first()
+        sentinel_id = sentinel_sec.id if sentinel_sec else None
+
+        # Subquery: latest valuation_date per account
+        latest_sub = (
+            db.query(
+                DailyHoldingValue.account_id,
+                func.max(DailyHoldingValue.valuation_date).label("max_date"),
+            )
+            .filter(DailyHoldingValue.account_id.in_(active_account_ids))
+            .group_by(DailyHoldingValue.account_id)
+            .subquery()
+        )
+
+        stale_q = (
+            db.query(
+                DailyHoldingValue.account_id,
+                func.count(DailyHoldingValue.id).label("cnt"),
+            )
+            .join(
+                latest_sub,
+                (DailyHoldingValue.account_id == latest_sub.c.account_id)
+                & (DailyHoldingValue.valuation_date == latest_sub.c.max_date),
+            )
+            .filter(
+                DailyHoldingValue.price_date.isnot(None),
+                # Exclude synthetic tickers — non-tradable holdings (real
+                # estate, vehicles, etc.) have no market price to go stale.
+                ~DailyHoldingValue.ticker.like(
+                    SYNTHETIC_PREFIX.replace("_", r"\_") + "%",
+                    escape="\\",
+                ),
+            )
+        )
+        if sentinel_id:
+            stale_q = stale_q.filter(DailyHoldingValue.security_id != sentinel_id)
+
+        # SQLite-specific date arithmetic (julianday is not portable to
+        # PostgreSQL/MySQL). Acceptable since this project uses SQLite only.
+        stale_q = stale_q.filter(
+            func.julianday(DailyHoldingValue.valuation_date)
+            - func.julianday(DailyHoldingValue.price_date) > STALE_PRICE_DAYS
+        )
+        for row in stale_q.group_by(DailyHoldingValue.account_id).all():
+            stale_counts[row.account_id] = row.cnt
+
     # Build account summaries with sync status
     accounts = []
     for account in active_accounts:
@@ -134,6 +191,7 @@ def get_dashboard(
                 balance_date=balance_date_str,
                 valuation_status=val_status,
                 valuation_date=val_date,
+                stale_price_count=stale_counts.get(account.id, 0),
             )
         )
 

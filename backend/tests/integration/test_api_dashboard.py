@@ -15,7 +15,9 @@ from models import (
     Security,
     SyncSession,
 )
+from services.portfolio_valuation_service import STALE_PRICE_DAYS
 from tests.fixtures import create_sync_session_with_holdings, get_or_create_security
+from utils.ticker import SYNTHETIC_PREFIX
 
 
 def _create_dashboard_test_data(db: Session):
@@ -907,3 +909,184 @@ class TestDashboardAPI:
         account_sum = sum(Decimal(a["value"]) for a in data["accounts"])
         assert total_net_worth == account_sum
         assert total_net_worth == Decimal("5000")
+
+
+class TestDashboardStalePriceCount:
+    """Tests for stale_price_count in dashboard response."""
+
+    def test_stale_price_count_populated(
+        self, client: TestClient, db: Session
+    ):
+        """Accounts with stale DHV price_date get stale_price_count > 0."""
+        account = Account(
+            provider_name="SnapTrade",
+            external_id="ext_stale_test",
+            name="Stale Test",
+            is_active=True,
+            include_in_allocation=True,
+        )
+        db.add(account)
+        db.flush()
+
+        snap = SyncSession(timestamp=datetime.now(timezone.utc), is_complete=True)
+        db.add(snap)
+        db.flush()
+
+        acct_snap = AccountSnapshot(
+            account_id=account.id,
+            sync_session_id=snap.id,
+            status="success",
+            total_value=Decimal("1000"),
+        )
+        db.add(acct_snap)
+        db.flush()
+
+        sec = get_or_create_security(db, "XYZ")
+        today = date.today()
+        stale_price_date = today - timedelta(days=STALE_PRICE_DAYS + 5)
+
+        db.add(Holding(
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker="XYZ",
+            quantity=Decimal("10"),
+            snapshot_price=Decimal("100"),
+            snapshot_value=Decimal("1000"),
+        ))
+        db.add(DailyHoldingValue(
+            valuation_date=today,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker="XYZ",
+            quantity=Decimal("10"),
+            close_price=Decimal("100"),
+            market_value=Decimal("1000"),
+            price_date=stale_price_date,
+        ))
+        db.commit()
+
+        response = client.get("/api/dashboard")
+        assert response.status_code == 200
+        data = response.json()
+
+        acct_data = next(a for a in data["accounts"] if a["id"] == account.id)
+        assert acct_data["stale_price_count"] == 1
+
+    def test_fresh_price_not_counted(
+        self, client: TestClient, db: Session
+    ):
+        """Accounts with recent price_date have stale_price_count = 0."""
+        account = Account(
+            provider_name="SnapTrade",
+            external_id="ext_fresh_test",
+            name="Fresh Test",
+            is_active=True,
+            include_in_allocation=True,
+        )
+        db.add(account)
+        db.flush()
+
+        snap = SyncSession(timestamp=datetime.now(timezone.utc), is_complete=True)
+        db.add(snap)
+        db.flush()
+
+        acct_snap = AccountSnapshot(
+            account_id=account.id,
+            sync_session_id=snap.id,
+            status="success",
+            total_value=Decimal("1000"),
+        )
+        db.add(acct_snap)
+        db.flush()
+
+        sec = get_or_create_security(db, "ABC")
+        today = date.today()
+
+        db.add(Holding(
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker="ABC",
+            quantity=Decimal("10"),
+            snapshot_price=Decimal("100"),
+            snapshot_value=Decimal("1000"),
+        ))
+        db.add(DailyHoldingValue(
+            valuation_date=today,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker="ABC",
+            quantity=Decimal("10"),
+            close_price=Decimal("100"),
+            market_value=Decimal("1000"),
+            price_date=today - timedelta(days=2),
+        ))
+        db.commit()
+
+        response = client.get("/api/dashboard")
+        assert response.status_code == 200
+        data = response.json()
+
+        acct_data = next(a for a in data["accounts"] if a["id"] == account.id)
+        assert acct_data["stale_price_count"] == 0
+
+    def test_synthetic_ticker_not_counted(
+        self, client: TestClient, db: Session
+    ):
+        """Synthetic tickers are excluded from stale price count."""
+        account = Account(
+            provider_name="Manual",
+            external_id="ext_syn_test",
+            name="Synthetic Test",
+            is_active=True,
+            include_in_allocation=True,
+        )
+        db.add(account)
+        db.flush()
+
+        snap = SyncSession(timestamp=datetime.now(timezone.utc), is_complete=True)
+        db.add(snap)
+        db.flush()
+
+        acct_snap = AccountSnapshot(
+            account_id=account.id,
+            sync_session_id=snap.id,
+            status="success",
+            total_value=Decimal("500000"),
+        )
+        db.add(acct_snap)
+        db.flush()
+
+        synthetic_ticker = f"{SYNTHETIC_PREFIX}abc123"
+        sec = get_or_create_security(db, synthetic_ticker)
+        today = date.today()
+        old_price_date = today - timedelta(days=60)
+
+        db.add(Holding(
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker=synthetic_ticker,
+            quantity=Decimal("1"),
+            snapshot_price=Decimal("500000"),
+            snapshot_value=Decimal("500000"),
+        ))
+        db.add(DailyHoldingValue(
+            valuation_date=today,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=sec.id,
+            ticker=synthetic_ticker,
+            quantity=Decimal("1"),
+            close_price=Decimal("500000"),
+            market_value=Decimal("500000"),
+            price_date=old_price_date,
+        ))
+        db.commit()
+
+        response = client.get("/api/dashboard")
+        assert response.status_code == 200
+        data = response.json()
+
+        acct_data = next(a for a in data["accounts"] if a["id"] == account.id)
+        assert acct_data["stale_price_count"] == 0
