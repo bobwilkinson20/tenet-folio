@@ -137,7 +137,8 @@ def get_dashboard(
         if sentinel_id:
             stale_q = stale_q.filter(DailyHoldingValue.security_id != sentinel_id)
 
-        # SQLite date arithmetic: julianday difference > STALE_PRICE_DAYS
+        # SQLite-specific date arithmetic (julianday is not portable to
+        # PostgreSQL/MySQL). Acceptable since this project uses SQLite only.
         stale_q = stale_q.filter(
             func.julianday(DailyHoldingValue.valuation_date)
             - func.julianday(DailyHoldingValue.price_date) > STALE_PRICE_DAYS
