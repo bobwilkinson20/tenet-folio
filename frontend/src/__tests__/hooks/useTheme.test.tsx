@@ -131,6 +131,13 @@ describe("useTheme", () => {
     expect(result.current.resolvedTheme).toBe("dark");
   });
 
+  it("syncs localStorage when preferences load", () => {
+    mockPrefs = { "theme.mode": "light" };
+    renderHook(() => useTheme());
+
+    expect(localStorageMock.setItem).toHaveBeenCalledWith("tf-theme", "light");
+  });
+
   it("responds to OS theme changes in system mode", async () => {
     mockMatchMedia(false);
     const { result } = renderHook(() => useTheme());

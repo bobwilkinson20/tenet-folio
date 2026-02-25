@@ -48,6 +48,18 @@ export function useTheme() {
     applyTheme(resolvedTheme);
   }, [resolvedTheme]);
 
+  // Keep localStorage in sync with API preference so the FOUC script
+  // has the correct value even if localStorage was cleared externally
+  useEffect(() => {
+    if (!loading) {
+      try {
+        localStorage.setItem(STORAGE_KEY, theme);
+      } catch {
+        // localStorage may be unavailable
+      }
+    }
+  }, [loading, theme]);
+
   // Listen for OS theme changes (subscription — setState in callback is fine)
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: light)");

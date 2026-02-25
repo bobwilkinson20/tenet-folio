@@ -35,6 +35,13 @@
 }
 
 /* ── Light Mode Overrides ── */
+/*
+ * Both :root vars (--bg-primary etc.) and Tailwind @theme vars (--color-tf-bg-primary etc.)
+ * must be overridden. The :root vars are referenced directly by Recharts and other inline
+ * var() usage. The --color-tf-* vars override the Tailwind-generated utility classes
+ * (e.g. bg-tf-bg-surface), which resolve at build time from the @theme block but can
+ * still be overridden at runtime via CSS custom properties.
+ */
 [data-theme="light"] {
   /* :root overrides */
   --bg-primary:     #f8fafc;

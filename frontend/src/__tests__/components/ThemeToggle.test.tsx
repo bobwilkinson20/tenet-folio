@@ -21,21 +21,21 @@ describe("ThemeToggle", () => {
     mockTheme = "system";
   });
 
-  it("renders a button with aria-label", () => {
+  it("renders a button with action-oriented aria-label", () => {
     render(<ThemeToggle />);
-    expect(screen.getByRole("button", { name: "System theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeInTheDocument();
   });
 
   it("shows correct aria-label for light mode", () => {
     mockTheme = "light";
     render(<ThemeToggle />);
-    expect(screen.getByRole("button", { name: "Light theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to dark theme" })).toBeInTheDocument();
   });
 
   it("shows correct aria-label for dark mode", () => {
     mockTheme = "dark";
     render(<ThemeToggle />);
-    expect(screen.getByRole("button", { name: "Dark theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to system theme" })).toBeInTheDocument();
   });
 
   it("cycles from system to light on click", async () => {

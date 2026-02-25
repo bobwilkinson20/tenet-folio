@@ -15,7 +15,7 @@ vi.mock("@/hooks/useTheme", () => ({
 }));
 
 vi.mock("@/components/layout/ThemeToggle", () => ({
-  ThemeToggle: () => <button aria-label="System theme">theme-toggle</button>,
+  ThemeToggle: () => <button aria-label="Switch to light theme">theme-toggle</button>,
 }));
 
 function renderLayout(initialRoute = "/") {
@@ -102,6 +102,6 @@ describe("Layout", () => {
   it("renders ThemeToggle", () => {
     renderLayout();
 
-    expect(screen.getByRole("button", { name: "System theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeInTheDocument();
   });
 });

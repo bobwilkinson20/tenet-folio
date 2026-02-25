@@ -13,10 +13,10 @@ const ICONS: Record<ThemeMode, React.ComponentType<React.SVGProps<SVGSVGElement>
   dark: MoonIcon,
 };
 
-const LABELS: Record<ThemeMode, string> = {
-  system: "System theme",
-  light: "Light theme",
-  dark: "Dark theme",
+const NEXT_LABELS: Record<ThemeMode, string> = {
+  system: "Switch to light theme",
+  light: "Switch to dark theme",
+  dark: "Switch to system theme",
 };
 
 export function ThemeToggle() {
@@ -34,7 +34,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={handleClick}
-      aria-label={LABELS[theme]}
+      aria-label={NEXT_LABELS[theme]}
       className="rounded-md p-2 text-tf-text-secondary transition-colors hover:bg-tf-bg-elevated hover:text-tf-text-primary"
     >
       <Icon className="h-5 w-5" />
