@@ -2726,6 +2726,138 @@ class TestPriceSourceTracking:
 
 
 # ---------------------------------------------------------------------------
+# Tests: _load_prior_closes
+# ---------------------------------------------------------------------------
+class TestLoadPriorCloses:
+    """Direct unit tests for _load_prior_closes static method."""
+
+    def test_returns_closes_for_prior_day(self, db: Session):
+        """Returns close prices from the day before start_date."""
+        account = _create_account(db, "Acct")
+        ts = datetime(2025, 1, 6, 12, 0, tzinfo=timezone.utc)
+        sync = _create_sync_session(db, ts)
+        snap = _create_account_snapshot(db, account, sync)
+        security = get_or_create_security(db, "AAPL")
+        db.add(DailyHoldingValue(
+            valuation_date=date(2025, 1, 5),
+            account_id=account.id,
+            account_snapshot_id=snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("150"),
+            market_value=Decimal("1500"),
+        ))
+        db.commit()
+
+        result = PortfolioValuationService._load_prior_closes(
+            db, date(2025, 1, 6), [account.id]
+        )
+        assert result == {(account.id, "AAPL"): Decimal("150")}
+
+    def test_returns_empty_when_no_prior_data(self, db: Session):
+        """Returns empty dict when no DHV rows exist for the prior day."""
+        account = _create_account(db, "Acct")
+        result = PortfolioValuationService._load_prior_closes(
+            db, date(2025, 1, 6), [account.id]
+        )
+        assert result == {}
+
+    def test_ignores_other_dates(self, db: Session):
+        """Only returns rows from exactly start_date - 1, not other dates."""
+        account = _create_account(db, "Acct")
+        ts = datetime(2025, 1, 6, 12, 0, tzinfo=timezone.utc)
+        sync = _create_sync_session(db, ts)
+        snap = _create_account_snapshot(db, account, sync)
+        security = get_or_create_security(db, "AAPL")
+        # Row for Jan 3 (two days before start)
+        db.add(DailyHoldingValue(
+            valuation_date=date(2025, 1, 3),
+            account_id=account.id,
+            account_snapshot_id=snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("140"),
+            market_value=Decimal("1400"),
+        ))
+        db.commit()
+
+        result = PortfolioValuationService._load_prior_closes(
+            db, date(2025, 1, 5), [account.id]
+        )
+        # Jan 4 has no data, so nothing returned
+        assert result == {}
+
+    def test_multiple_holdings_multiple_accounts(self, db: Session):
+        """Returns entries for all holdings across all specified accounts."""
+        acct1 = _create_account(db, "Acct1", external_id="ext1")
+        acct2 = _create_account(db, "Acct2", external_id="ext2")
+        ts = datetime(2025, 1, 6, 12, 0, tzinfo=timezone.utc)
+        sync = _create_sync_session(db, ts)
+        snap1 = _create_account_snapshot(db, acct1, sync)
+        snap2 = _create_account_snapshot(db, acct2, sync)
+        sec_aapl = get_or_create_security(db, "AAPL")
+        sec_goog = get_or_create_security(db, "GOOG")
+
+        for acct, snap, ticker, sec, price in [
+            (acct1, snap1, "AAPL", sec_aapl, "150"),
+            (acct1, snap1, "GOOG", sec_goog, "2800"),
+            (acct2, snap2, "AAPL", sec_aapl, "150"),
+        ]:
+            db.add(DailyHoldingValue(
+                valuation_date=date(2025, 1, 5),
+                account_id=acct.id,
+                account_snapshot_id=snap.id,
+                security_id=sec.id,
+                ticker=ticker,
+                quantity=Decimal("1"),
+                close_price=Decimal(price),
+                market_value=Decimal(price),
+            ))
+        db.commit()
+
+        result = PortfolioValuationService._load_prior_closes(
+            db, date(2025, 1, 6), [acct1.id, acct2.id]
+        )
+        assert len(result) == 3
+        assert result[(acct1.id, "AAPL")] == Decimal("150")
+        assert result[(acct1.id, "GOOG")] == Decimal("2800")
+        assert result[(acct2.id, "AAPL")] == Decimal("150")
+
+    def test_ignores_unspecified_accounts(self, db: Session):
+        """Only returns rows for the account IDs passed in."""
+        acct1 = _create_account(db, "Acct1", external_id="ext1")
+        acct2 = _create_account(db, "Acct2", external_id="ext2")
+        ts = datetime(2025, 1, 6, 12, 0, tzinfo=timezone.utc)
+        sync = _create_sync_session(db, ts)
+        snap1 = _create_account_snapshot(db, acct1, sync)
+        snap2 = _create_account_snapshot(db, acct2, sync)
+        security = get_or_create_security(db, "AAPL")
+
+        for acct, snap in [(acct1, snap1), (acct2, snap2)]:
+            db.add(DailyHoldingValue(
+                valuation_date=date(2025, 1, 5),
+                account_id=acct.id,
+                account_snapshot_id=snap.id,
+                security_id=security.id,
+                ticker="AAPL",
+                quantity=Decimal("1"),
+                close_price=Decimal("150"),
+                market_value=Decimal("150"),
+            ))
+        db.commit()
+
+        # Only ask for acct1
+        result = PortfolioValuationService._load_prior_closes(
+            db, date(2025, 1, 6), [acct1.id]
+        )
+        assert len(result) == 1
+        assert (acct1.id, "AAPL") in result
+        assert (acct2.id, "AAPL") not in result
+
+
+# ---------------------------------------------------------------------------
 # Tests: Price Guards
 # ---------------------------------------------------------------------------
 class TestPriceGuards:

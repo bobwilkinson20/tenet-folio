@@ -1064,6 +1064,12 @@ class PortfolioValuationService:
 
         Returns a dict of (account_id, ticker) -> close_price for the day
         before start_date.
+
+        Uses exactly 1-day lookback (not a wider window) because DHV rows
+        are built for every calendar day — including weekends and holidays —
+        so the previous calendar day always has data if the account has any
+        history.  If no row exists (e.g. first-ever backfill), the key is
+        simply absent and the ratio check in _validate_price() is skipped.
         """
         prior_date = start_date - timedelta(days=1)
         rows = (
@@ -1165,6 +1171,9 @@ class PortfolioValuationService:
                     )
                     if deviation > threshold:
                         should_correct = True
+            elif stored_source == PRICE_SOURCE_CORRECTED:
+                # Already corrected in a prior run — skip to avoid re-correcting
+                pass
 
             if should_correct:
                 old_price = stored_price
