@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -41,7 +41,7 @@ class StalePriceInfo(BaseModel):
     age_days: int
     close_price: Decimal
     market_value: Decimal
-    price_source: Optional[str] = None
+    price_source: Optional[Literal["market", "snapshot", "carry_forward", "corrected", "cash"]] = None
 
 
 class AccountDHVDiagnostic(BaseModel):

@@ -633,7 +633,9 @@ class PortfolioValuationService:
         # Detect crypto symbols via Security asset classification
         crypto_symbols = self._detect_crypto_symbols(db)
 
-        # Extend fetch range for retrospective validation
+        # Extend fetch range by RETRO_TRAILING_CALENDAR_DAYS so the same
+        # market_data dict serves both forward calculation and retrospective
+        # validation, avoiding a second API call.
         retro_fetch_start = start_date - timedelta(days=RETRO_TRAILING_CALENDAR_DAYS)
 
         # Fetch market data for all symbols
@@ -1071,6 +1073,8 @@ class PortfolioValuationService:
         history.  If no row exists (e.g. first-ever backfill), the key is
         simply absent and the ratio check in _validate_price() is skipped.
         """
+        if not account_ids:
+            return {}
         prior_date = start_date - timedelta(days=1)
         rows = (
             db.query(
@@ -1102,7 +1106,14 @@ class PortfolioValuationService:
 
         Looks back RETRO_TRAILING_CALENDAR_DAYS before start_date and
         corrects rows where the stored price differs from fresh market data.
+
+        Rows with PRICE_SOURCE_CORRECTED are permanently frozen — skipped
+        to prevent re-correction loops. The original price and source are
+        not preserved separately.
         """
+        if not market_data:
+            return
+
         retro_end = start_date - timedelta(days=1)
         retro_start = start_date - timedelta(days=RETRO_TRAILING_CALENDAR_DAYS)
 
@@ -1172,8 +1183,8 @@ class PortfolioValuationService:
                     if deviation > threshold:
                         should_correct = True
             elif stored_source == PRICE_SOURCE_CORRECTED:
-                # Already corrected in a prior run — skip to avoid re-correcting
-                pass
+                # Permanently frozen — never re-correct
+                continue
 
             if should_correct:
                 old_price = stored_price
