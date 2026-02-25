@@ -27,7 +27,9 @@ export function ValuationWarning({ accounts }: Props) {
       a.valuation_status !== null && a.valuation_status !== "ok",
   );
 
-  if (problemAccounts.length === 0) {
+  const stalePriceAccounts = accounts.filter((a) => a.stale_price_count > 0);
+
+  if (problemAccounts.length === 0 && stalePriceAccounts.length === 0) {
     return null;
   }
 
@@ -69,10 +71,25 @@ export function ValuationWarning({ accounts }: Props) {
                 {a.name}: {statusDescription(a.valuation_status)}
               </li>
             ))}
+            {stalePriceAccounts
+              .filter((a) => !problemAccounts.some((p) => p.id === a.id))
+              .map((a) => (
+                <li key={`stale-${a.id}`}>
+                  {a.name}: {a.stale_price_count} holding(s) using stale price
+                  data
+                </li>
+              ))}
           </ul>
-          <p className={`mt-2 text-sm ${textClass}`}>
-            Try re-syncing your accounts to resolve this.
-          </p>
+          {problemAccounts.length > 0 && (
+            <p className={`mt-2 text-sm ${textClass}`}>
+              Try re-syncing your accounts to resolve this.
+            </p>
+          )}
+          {stalePriceAccounts.length > 0 && (
+            <p className={`mt-2 text-sm ${textClass}`}>
+              Check DHV diagnostics for details on stale prices.
+            </p>
+          )}
         </div>
       </div>
     </div>

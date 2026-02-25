@@ -39,6 +39,7 @@ class DailyHoldingValue(Base):
     ticker = Column(String, nullable=False)  # Kept for convenience/fallback
     quantity = Column(Numeric(18, 8), nullable=False, default=Decimal("0"))
     close_price = Column(Numeric(18, 6), nullable=False, default=Decimal("0"))
+    price_date = Column(Date, nullable=True)
     market_value = Column(Numeric(18, 2), nullable=False, default=Decimal("0"))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

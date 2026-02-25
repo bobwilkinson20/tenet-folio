@@ -417,11 +417,13 @@ def get_dhv_diagnostics(db: Session = Depends(get_db)):
     accounts = [AccountDHVDiagnostic(**gap) for gap in account_gaps]
     total_missing = sum(gap["missing_days"] for gap in account_gaps)
     total_partial = sum(gap.get("partial_days", 0) for gap in account_gaps)
+    total_stale = sum(gap.get("stale_price_count", 0) for gap in account_gaps)
 
     return DHVDiagnosticsResponse(
         accounts=accounts,
         total_missing_days=total_missing,
         total_partial_days=total_partial,
+        total_stale_price_count=total_stale,
     )
 
 

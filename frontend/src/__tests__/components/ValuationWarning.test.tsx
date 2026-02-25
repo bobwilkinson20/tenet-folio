@@ -16,6 +16,7 @@ function makeAccount(
     balance_date: null,
     valuation_status: "ok",
     valuation_date: "2026-01-28",
+    stale_price_count: 0,
     ...overrides,
   };
 }
@@ -93,5 +94,51 @@ describe("ValuationWarning", () => {
     const banner = screen.getByTestId("valuation-warning");
     expect(banner.className).toContain("tf-warning");
     expect(banner.className).not.toContain("tf-negative");
+  });
+
+  it("shows stale price warning when stale_price_count > 0", () => {
+    const accounts = [
+      makeAccount({
+        id: "1",
+        name: "Stale Prices Acct",
+        valuation_status: "ok",
+        stale_price_count: 3,
+      }),
+    ];
+    render(<ValuationWarning accounts={accounts} />);
+
+    expect(screen.getByTestId("valuation-warning")).toBeInTheDocument();
+    expect(screen.getByText(/Stale Prices Acct/)).toBeInTheDocument();
+    expect(screen.getByText(/3 holding\(s\) using stale price data/)).toBeInTheDocument();
+    expect(screen.getByText(/DHV diagnostics/)).toBeInTheDocument();
+  });
+
+  it("renders nothing when stale_price_count is 0 and valuation ok", () => {
+    const accounts = [
+      makeAccount({
+        id: "1",
+        name: "Good",
+        valuation_status: "ok",
+        stale_price_count: 0,
+      }),
+    ];
+    const { container } = render(<ValuationWarning accounts={accounts} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("does not duplicate account in stale list when already in problem list", () => {
+    const accounts = [
+      makeAccount({
+        id: "1",
+        name: "Both Issues",
+        valuation_status: "partial",
+        stale_price_count: 2,
+      }),
+    ];
+    render(<ValuationWarning accounts={accounts} />);
+
+    // Should only appear once (in the valuation problem list)
+    const items = screen.getAllByText(/Both Issues/);
+    expect(items).toHaveLength(1);
   });
 });

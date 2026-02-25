@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,9 +14,20 @@ from models.asset_class import AssetClass
 from models.security import Security
 from services.market_data_service import MarketDataService
 from services.security_service import SecurityService
-from utils.ticker import ZERO_BALANCE_TICKER
+from utils.ticker import SYNTHETIC_PREFIX, ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)
+
+# Calendar days before a carry-forward price is considered stale (~5 trading days).
+STALE_PRICE_DAYS = 7
+
+
+class PriceWithDate(NamedTuple):
+    """A close price paired with the actual trading date it came from."""
+
+    price: Decimal
+    price_date: date
+
 
 # Tickers treated as cash equivalents (always priced at $1.00).
 CASH_TICKERS = frozenset({
@@ -75,20 +86,23 @@ def build_price_lookup(
     market_data: dict[str, list],
     start_date: date,
     end_date: date,
-) -> dict[str, dict[date, Decimal]]:
-    """Build a symbol -> date -> price mapping with carry-forward.
+) -> dict[str, dict[date, PriceWithDate]]:
+    """Build a symbol -> date -> PriceWithDate mapping with carry-forward.
 
     For each calendar day in the range, if no price exists for that day,
     the most recent prior price is used. This handles weekends, holidays,
-    and symbols with sparse data.
+    and symbols with sparse data.  The ``price_date`` field on each entry
+    records the actual trading date the close price came from, so callers
+    can detect stale carry-forwards.
     """
-    lookup: dict[str, dict[date, Decimal]] = {}
+    lookup: dict[str, dict[date, PriceWithDate]] = {}
 
     for symbol, prices in market_data.items():
         sorted_prices = sorted(prices, key=lambda p: p.price_date)
 
-        price_map: dict[date, Decimal] = {}
+        price_map: dict[date, PriceWithDate] = {}
         last_price: Optional[Decimal] = None
+        last_price_date: Optional[date] = None
         price_idx = 0
 
         current = start_date
@@ -98,10 +112,11 @@ def build_price_lookup(
                 and sorted_prices[price_idx].price_date <= current
             ):
                 last_price = sorted_prices[price_idx].close_price
+                last_price_date = sorted_prices[price_idx].price_date
                 price_idx += 1
 
-            if last_price is not None:
-                price_map[current] = last_price
+            if last_price is not None and last_price_date is not None:
+                price_map[current] = PriceWithDate(last_price, last_price_date)
 
             current += timedelta(days=1)
 
@@ -157,6 +172,7 @@ class PortfolioValuationService:
                 existing.close_price = h.snapshot_price
                 existing.market_value = h.snapshot_value
                 existing.account_snapshot_id = h.account_snapshot_id
+                existing.price_date = valuation_date
                 rows.append(existing)
             else:
                 dhv = DailyHoldingValue(
@@ -168,6 +184,7 @@ class PortfolioValuationService:
                     quantity=h.quantity,
                     close_price=h.snapshot_price,
                     market_value=h.snapshot_value,
+                    price_date=valuation_date,
                 )
                 db.add(dhv)
                 rows.append(dhv)
@@ -221,6 +238,7 @@ class PortfolioValuationService:
             existing.quantity = Decimal("0")
             existing.close_price = Decimal("0")
             existing.market_value = Decimal("0")
+            existing.price_date = valuation_date
             return existing
 
         dhv = DailyHoldingValue(
@@ -232,6 +250,7 @@ class PortfolioValuationService:
             quantity=Decimal("0"),
             close_price=Decimal("0"),
             market_value=Decimal("0"),
+            price_date=valuation_date,
         )
         db.add(dhv)
         return dhv
@@ -322,13 +341,14 @@ class PortfolioValuationService:
         return self._run_backfill(db, start_date, end_date, repair=repair)
 
     def diagnose_gaps(self, db: Session) -> list[dict]:
-        """Analyze DHV gaps for each active account.
+        """Analyze DHV gaps and stale prices for each active account.
 
         Returns a list of per-account diagnostics with:
         - account_id, account_name
         - expected_start, expected_end (first snapshot → yesterday)
         - expected_days, actual_days, missing_days
         - missing_dates (list, capped at 100)
+        - stale_price_count, stale_prices (holdings with stale carry-forward prices)
         """
         yesterday = date.today() - timedelta(days=1)
         all_accounts = db.query(Account).all()
@@ -463,6 +483,39 @@ class PortfolioValuationService:
                         seen_dates.add(val_date)
                 partial = sorted(seen_dates)
 
+            # Detect stale carry-forward prices on the latest valuation date.
+            # Excludes synthetic tickers (_SYN:*) — these are non-tradable
+            # holdings (real estate, vehicles, etc.) with no market price to
+            # go stale; the user sets a value manually.
+            stale_prices: list[dict] = []
+            if actual_dates:
+                latest_val_date = max(actual_dates)
+                stale_q = (
+                    db.query(DailyHoldingValue)
+                    .filter(
+                        DailyHoldingValue.account_id == account.id,
+                        DailyHoldingValue.valuation_date == latest_val_date,
+                        DailyHoldingValue.price_date.isnot(None),
+                        ~DailyHoldingValue.ticker.startswith(SYNTHETIC_PREFIX),
+                    )
+                )
+                if sentinel_id:
+                    stale_q = stale_q.filter(
+                        DailyHoldingValue.security_id != sentinel_id
+                    )
+                for dhv_row in stale_q.all():
+                    age = (dhv_row.valuation_date - dhv_row.price_date).days
+                    if age > STALE_PRICE_DAYS:
+                        sec = dhv_row.security
+                        stale_prices.append({
+                            "ticker": dhv_row.ticker,
+                            "security_name": sec.name if sec else None,
+                            "price_date": dhv_row.price_date,
+                            "age_days": age,
+                            "close_price": dhv_row.close_price,
+                            "market_value": dhv_row.market_value,
+                        })
+
             results.append({
                 "account_id": account.id,
                 "account_name": account.name,
@@ -474,6 +527,8 @@ class PortfolioValuationService:
                 "missing_dates": [d.isoformat() for d in missing[:100]],
                 "partial_days": len(partial),
                 "partial_dates": [d.isoformat() for d in partial[:100]],
+                "stale_price_count": len(stale_prices),
+                "stale_prices": stale_prices,
             })
 
         return results
@@ -612,6 +667,7 @@ class PortfolioValuationService:
                 if existing:
                     existing.close_price = row.close_price
                     existing.market_value = row.market_value
+                    existing.price_date = row.price_date
                     if repair:
                         existing.quantity = row.quantity
                         existing.account_snapshot_id = row.account_snapshot_id
@@ -774,7 +830,7 @@ class PortfolioValuationService:
         self,
         target_date: date,
         account_timelines: dict[str, list[SnapshotWindow]],
-        price_lookup: dict[str, dict[date, Decimal]],
+        price_lookup: dict[str, dict[date, PriceWithDate]],
         zero_balance_security_id: Optional[str] = None,
     ) -> list[DailyHoldingValue]:
         """Compute all holding values for a single day across all accounts."""
@@ -803,15 +859,17 @@ class PortfolioValuationService:
                     quantity=Decimal("0"),
                     close_price=Decimal("0"),
                     market_value=Decimal("0"),
+                    price_date=target_date,
                 ))
                 continue
 
             for holding in active_window.holdings:
-                price = self._get_price_for_holding(
+                price_info = self._get_price_for_holding(
                     price_lookup, holding.ticker, target_date,
                     holding.snapshot_price,
+                    snapshot_effective_date=active_window.effective_date,
                 )
-                market_value = (holding.quantity * price).quantize(
+                market_value = (holding.quantity * price_info.price).quantize(
                     Decimal("0.01"), rounding=ROUND_HALF_UP
                 )
 
@@ -822,29 +880,36 @@ class PortfolioValuationService:
                     security_id=holding.security_id,
                     ticker=holding.ticker,
                     quantity=holding.quantity,
-                    close_price=price,
+                    close_price=price_info.price,
                     market_value=market_value,
+                    price_date=price_info.price_date,
                 ))
 
         return rows
 
     @staticmethod
     def _get_price_for_holding(
-        price_lookup: dict[str, dict[date, Decimal]],
+        price_lookup: dict[str, dict[date, PriceWithDate]],
         ticker: str,
         target_date: date,
         snapshot_price: Decimal,
-    ) -> Decimal:
-        """Get the best available price for a holding on a given date."""
+        snapshot_effective_date: Optional[date] = None,
+    ) -> PriceWithDate:
+        """Get the best available price for a holding on a given date.
+
+        Returns a ``PriceWithDate`` so callers can record the actual
+        trading date of the price used.
+        """
         if is_cash_equivalent(ticker, snapshot_price):
-            return Decimal("1")
+            return PriceWithDate(Decimal("1"), target_date)
 
         symbol_prices = price_lookup.get(ticker, {})
         if target_date in symbol_prices:
             return symbol_prices[target_date]
 
         # Fall back to snapshot price
-        return snapshot_price
+        fallback_date = snapshot_effective_date if snapshot_effective_date is not None else target_date
+        return PriceWithDate(snapshot_price, fallback_date)
 
     @staticmethod
     def _detect_crypto_symbols(db: Session) -> Optional[set[str]]:

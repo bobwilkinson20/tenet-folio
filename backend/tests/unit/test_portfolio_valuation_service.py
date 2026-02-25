@@ -12,8 +12,10 @@ from models import Security
 from models.asset_class import AssetClass
 from services.portfolio_valuation_service import (
     CASH_TICKERS,
+    STALE_PRICE_DAYS,
     HoldingSummary,
     PortfolioValuationService,
+    PriceWithDate,
     SnapshotWindow,
     build_price_lookup,
     is_cash_equivalent,
@@ -137,7 +139,7 @@ class TestBuildPriceLookup:
     """Tests for the price lookup builder with carry-forward logic."""
 
     def test_basic_trading_days(self):
-        """Trading day prices are mapped correctly."""
+        """Trading day prices are mapped correctly with correct price_date."""
         market_data = {
             "AAPL": [
                 PriceResult("AAPL", date(2025, 1, 6), Decimal("150"), "mock"),
@@ -147,11 +149,11 @@ class TestBuildPriceLookup:
         lookup = build_price_lookup(
             market_data, date(2025, 1, 6), date(2025, 1, 7)
         )
-        assert lookup["AAPL"][date(2025, 1, 6)] == Decimal("150")
-        assert lookup["AAPL"][date(2025, 1, 7)] == Decimal("152")
+        assert lookup["AAPL"][date(2025, 1, 6)] == PriceWithDate(Decimal("150"), date(2025, 1, 6))
+        assert lookup["AAPL"][date(2025, 1, 7)] == PriceWithDate(Decimal("152"), date(2025, 1, 7))
 
     def test_carry_forward_over_weekend(self):
-        """Friday's price carries forward through Saturday and Sunday."""
+        """Friday's price carries forward through Saturday and Sunday with Friday's price_date."""
         market_data = {
             "AAPL": [
                 PriceResult("AAPL", date(2025, 1, 3), Decimal("150"), "mock"),  # Fri
@@ -161,13 +163,17 @@ class TestBuildPriceLookup:
         lookup = build_price_lookup(
             market_data, date(2025, 1, 3), date(2025, 1, 6)
         )
-        assert lookup["AAPL"][date(2025, 1, 3)] == Decimal("150")
-        assert lookup["AAPL"][date(2025, 1, 4)] == Decimal("150")  # Sat
-        assert lookup["AAPL"][date(2025, 1, 5)] == Decimal("150")  # Sun
-        assert lookup["AAPL"][date(2025, 1, 6)] == Decimal("155")
+        assert lookup["AAPL"][date(2025, 1, 3)].price == Decimal("150")
+        assert lookup["AAPL"][date(2025, 1, 3)].price_date == date(2025, 1, 3)
+        assert lookup["AAPL"][date(2025, 1, 4)].price == Decimal("150")  # Sat
+        assert lookup["AAPL"][date(2025, 1, 4)].price_date == date(2025, 1, 3)  # Still Friday
+        assert lookup["AAPL"][date(2025, 1, 5)].price == Decimal("150")  # Sun
+        assert lookup["AAPL"][date(2025, 1, 5)].price_date == date(2025, 1, 3)  # Still Friday
+        assert lookup["AAPL"][date(2025, 1, 6)].price == Decimal("155")
+        assert lookup["AAPL"][date(2025, 1, 6)].price_date == date(2025, 1, 6)
 
     def test_carry_forward_over_holiday(self):
-        """Holiday gap is filled with the prior close."""
+        """Holiday gap is filled with the prior close and its price_date."""
         market_data = {
             "AAPL": [
                 PriceResult("AAPL", date(2025, 1, 2), Decimal("148"), "mock"),
@@ -178,9 +184,12 @@ class TestBuildPriceLookup:
         lookup = build_price_lookup(
             market_data, date(2025, 1, 2), date(2025, 1, 6)
         )
-        assert lookup["AAPL"][date(2025, 1, 3)] == Decimal("148")
-        assert lookup["AAPL"][date(2025, 1, 4)] == Decimal("148")
-        assert lookup["AAPL"][date(2025, 1, 5)] == Decimal("148")
+        assert lookup["AAPL"][date(2025, 1, 3)].price == Decimal("148")
+        assert lookup["AAPL"][date(2025, 1, 3)].price_date == date(2025, 1, 2)
+        assert lookup["AAPL"][date(2025, 1, 4)].price == Decimal("148")
+        assert lookup["AAPL"][date(2025, 1, 4)].price_date == date(2025, 1, 2)
+        assert lookup["AAPL"][date(2025, 1, 5)].price == Decimal("148")
+        assert lookup["AAPL"][date(2025, 1, 5)].price_date == date(2025, 1, 2)
 
     def test_no_data_for_symbol(self):
         """Symbol with no prices results in empty lookup."""
@@ -202,8 +211,9 @@ class TestBuildPriceLookup:
         )
         assert date(2025, 1, 6) not in lookup["AAPL"]
         assert date(2025, 1, 7) not in lookup["AAPL"]
-        assert lookup["AAPL"][date(2025, 1, 8)] == Decimal("155")
-        assert lookup["AAPL"][date(2025, 1, 9)] == Decimal("155")
+        assert lookup["AAPL"][date(2025, 1, 8)].price == Decimal("155")
+        assert lookup["AAPL"][date(2025, 1, 9)].price == Decimal("155")
+        assert lookup["AAPL"][date(2025, 1, 9)].price_date == date(2025, 1, 8)  # carry-forward
 
     def test_multiple_symbols(self):
         """Multiple symbols are tracked independently."""
@@ -218,8 +228,25 @@ class TestBuildPriceLookup:
         lookup = build_price_lookup(
             market_data, date(2025, 1, 6), date(2025, 1, 6)
         )
-        assert lookup["AAPL"][date(2025, 1, 6)] == Decimal("150")
-        assert lookup["GOOG"][date(2025, 1, 6)] == Decimal("2800")
+        assert lookup["AAPL"][date(2025, 1, 6)].price == Decimal("150")
+        assert lookup["GOOG"][date(2025, 1, 6)].price == Decimal("2800")
+
+    def test_extended_stale_carry_forward(self):
+        """Price_date stays at last real trading day even over 30+ day gap."""
+        market_data = {
+            "DELIST": [
+                PriceResult("DELIST", date(2025, 1, 6), Decimal("50"), "mock"),
+                # No more prices — stock delisted
+            ]
+        }
+        lookup = build_price_lookup(
+            market_data, date(2025, 1, 6), date(2025, 2, 10)
+        )
+        # Day 1 has the actual price date
+        assert lookup["DELIST"][date(2025, 1, 6)].price_date == date(2025, 1, 6)
+        # 35 days later, still carries forward with the original price_date
+        assert lookup["DELIST"][date(2025, 2, 10)].price == Decimal("50")
+        assert lookup["DELIST"][date(2025, 2, 10)].price_date == date(2025, 1, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -840,8 +867,8 @@ class TestCalculateDay:
 
         price_lookup = {
             "AAPL": {
-                date(2025, 1, 5): Decimal("145"),
-                date(2025, 1, 10): Decimal("155"),
+                date(2025, 1, 5): PriceWithDate(Decimal("145"), date(2025, 1, 5)),
+                date(2025, 1, 10): PriceWithDate(Decimal("155"), date(2025, 1, 10)),
             },
         }
 
@@ -850,12 +877,14 @@ class TestCalculateDay:
         assert len(rows) == 1
         assert rows[0].quantity == Decimal("10")
         assert rows[0].close_price == Decimal("145")
+        assert rows[0].price_date == date(2025, 1, 5)
 
         # After transition: uses window 2 (qty=20)
         rows = service._calculate_day(date(2025, 1, 10), timelines, price_lookup)
         assert len(rows) == 1
         assert rows[0].quantity == Decimal("20")
         assert rows[0].close_price == Decimal("155")
+        assert rows[0].price_date == date(2025, 1, 10)
 
     def test_no_window_for_date(self):
         """If no window covers the date, no rows produced."""
@@ -2206,3 +2235,369 @@ class TestDetectCryptoSymbols:
         assert len(captured_crypto_symbols) == 1
         assert captured_crypto_symbols[0] is not None
         assert "BTC" in captured_crypto_symbols[0]
+
+
+# ---------------------------------------------------------------------------
+# Tests: _get_price_for_holding price_date behaviour
+# ---------------------------------------------------------------------------
+class TestGetPriceForHoldingPriceDate:
+    """Tests that _get_price_for_holding returns correct PriceWithDate."""
+
+    def test_cash_equivalent_uses_target_date(self):
+        """Cash equivalents always return price_date == target_date."""
+        result = PortfolioValuationService._get_price_for_holding(
+            {}, "USD", date(2025, 6, 15), Decimal("1"),
+        )
+        assert result == PriceWithDate(Decimal("1"), date(2025, 6, 15))
+
+    def test_market_price_uses_lookup_price_date(self):
+        """When market price is available, price_date comes from lookup."""
+        lookup = {
+            "AAPL": {
+                # Weekend carry-forward: Monday lookup has Friday's price_date
+                date(2025, 1, 6): PriceWithDate(Decimal("155"), date(2025, 1, 3)),
+            },
+        }
+        result = PortfolioValuationService._get_price_for_holding(
+            lookup, "AAPL", date(2025, 1, 6), Decimal("150"),
+        )
+        assert result.price == Decimal("155")
+        assert result.price_date == date(2025, 1, 3)  # Friday, not Monday
+
+    def test_snapshot_fallback_uses_effective_date(self):
+        """When falling back to snapshot price, price_date == snapshot_effective_date."""
+        result = PortfolioValuationService._get_price_for_holding(
+            {}, "PRIVCO", date(2025, 6, 15), Decimal("25.50"),
+            snapshot_effective_date=date(2025, 6, 10),
+        )
+        assert result.price == Decimal("25.50")
+        assert result.price_date == date(2025, 6, 10)
+
+    def test_snapshot_fallback_no_effective_date(self):
+        """Without snapshot_effective_date, fallback uses target_date."""
+        result = PortfolioValuationService._get_price_for_holding(
+            {}, "PRIVCO", date(2025, 6, 15), Decimal("25.50"),
+        )
+        assert result.price == Decimal("25.50")
+        assert result.price_date == date(2025, 6, 15)
+
+
+# ---------------------------------------------------------------------------
+# Tests: price_date persisted on DHV rows
+# ---------------------------------------------------------------------------
+class TestPriceDatePersistence:
+    """Tests that price_date is correctly persisted on DHV rows."""
+
+    def test_backfill_sets_price_date(self, db: Session):
+        """Backfill writes price_date on each DHV row."""
+        yesterday = date.today() - timedelta(days=1)
+        snap_dt = datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.commit()
+
+        prices = {"AAPL": {yesterday: Decimal("155")}}
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        row = db.query(DailyHoldingValue).first()
+        assert row is not None
+        assert row.price_date == yesterday
+
+    def test_backfill_carry_forward_price_date(self, db: Session):
+        """When price is carried forward, price_date reflects the actual trading day."""
+        yesterday = date.today() - timedelta(days=1)
+        day_before = yesterday - timedelta(days=1)
+        snap_dt = datetime.combine(day_before, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.commit()
+
+        # Only provide price for day_before, not yesterday (carry-forward)
+        prices = {"AAPL": {day_before: Decimal("150")}}
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        rows = (
+            db.query(DailyHoldingValue)
+            .order_by(DailyHoldingValue.valuation_date)
+            .all()
+        )
+        assert len(rows) == 2
+        # Day before: actual price date
+        assert rows[0].valuation_date == day_before
+        assert rows[0].price_date == day_before
+        # Yesterday: carried forward from day_before
+        assert rows[1].valuation_date == yesterday
+        assert rows[1].price_date == day_before
+
+    def test_cash_price_date_is_valuation_date(self, db: Session):
+        """Cash equivalents get price_date == valuation_date (always fresh)."""
+        yesterday = date.today() - timedelta(days=1)
+        snap_dt = datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "USD", Decimal("5000"), Decimal("1"), acct_snap)
+        db.commit()
+
+        service = _make_mock_service({})
+        service.backfill(db)
+
+        row = db.query(DailyHoldingValue).first()
+        assert row is not None
+        assert row.price_date == yesterday
+
+    def test_create_daily_values_sets_price_date(self, db: Session):
+        """create_daily_values_for_holdings sets price_date = valuation_date."""
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, datetime.now(timezone.utc))
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        h = _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.flush()
+
+        today = date.today()
+        rows = PortfolioValuationService.create_daily_values_for_holdings(
+            db, [h], today, account_id=account.id
+        )
+        db.flush()
+
+        assert len(rows) == 1
+        assert rows[0].price_date == today
+
+    def test_sentinel_price_date_is_valuation_date(self, db: Session):
+        """Zero-balance sentinel rows get price_date == valuation_date."""
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, datetime.now(timezone.utc))
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        db.commit()
+
+        today = date.today()
+        dhv = PortfolioValuationService.write_zero_balance_sentinel(
+            db, account.id, acct_snap.id, today
+        )
+        db.flush()
+
+        assert dhv.price_date == today
+
+    def test_upsert_updates_price_date(self, db: Session):
+        """Full backfill upsert updates price_date on existing rows."""
+        yesterday = date.today() - timedelta(days=1)
+        snap_dt = datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        # Pre-existing DHV row without price_date
+        security = get_or_create_security(db, "AAPL")
+        dhv = DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("150"),
+            market_value=Decimal("1500"),
+            price_date=None,
+        )
+        db.add(dhv)
+        db.commit()
+
+        prices = {"AAPL": {yesterday: Decimal("155")}}
+        service = _make_mock_service(prices)
+        service.full_backfill(db)
+
+        row = db.query(DailyHoldingValue).first()
+        assert row is not None
+        assert row.price_date == yesterday
+        assert row.close_price == Decimal("155")
+
+
+# ---------------------------------------------------------------------------
+# Tests: diagnose_gaps stale price detection
+# ---------------------------------------------------------------------------
+class TestDiagnoseGapsStalePrice:
+    """Tests for stale price detection in diagnose_gaps."""
+
+    def test_stale_price_flagged(self, db: Session):
+        """Holdings with price_date > STALE_PRICE_DAYS behind are flagged."""
+        yesterday = date.today() - timedelta(days=1)
+        old_price_date = yesterday - timedelta(days=STALE_PRICE_DAYS + 5)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(
+            db, datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+        )
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "DELIST", Decimal("100"), Decimal("50"), acct_snap)
+
+        security = get_or_create_security(db, "DELIST")
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="DELIST",
+            quantity=Decimal("100"),
+            close_price=Decimal("50"),
+            market_value=Decimal("5000"),
+            price_date=old_price_date,
+        ))
+        db.commit()
+
+        service = PortfolioValuationService()
+        gaps = service.diagnose_gaps(db)
+        assert len(gaps) == 1
+        assert gaps[0]["stale_price_count"] == 1
+        assert len(gaps[0]["stale_prices"]) == 1
+        stale = gaps[0]["stale_prices"][0]
+        assert stale["ticker"] == "DELIST"
+        assert stale["age_days"] == STALE_PRICE_DAYS + 5
+
+    def test_weekend_not_flagged(self, db: Session):
+        """Weekend carry-forward (2 days) is NOT flagged as stale."""
+        yesterday = date.today() - timedelta(days=1)
+        friday = yesterday - timedelta(days=2)  # 2-day gap
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(
+            db, datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+        )
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        security = get_or_create_security(db, "AAPL")
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("150"),
+            market_value=Decimal("1500"),
+            price_date=friday,
+        ))
+        db.commit()
+
+        service = PortfolioValuationService()
+        gaps = service.diagnose_gaps(db)
+        assert len(gaps) == 1
+        assert gaps[0]["stale_price_count"] == 0
+
+    def test_null_price_date_skipped(self, db: Session):
+        """Rows with price_date=NULL (pre-migration) are not flagged."""
+        yesterday = date.today() - timedelta(days=1)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(
+            db, datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+        )
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        security = get_or_create_security(db, "AAPL")
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("150"),
+            market_value=Decimal("1500"),
+            price_date=None,
+        ))
+        db.commit()
+
+        service = PortfolioValuationService()
+        gaps = service.diagnose_gaps(db)
+        assert len(gaps) == 1
+        assert gaps[0]["stale_price_count"] == 0
+
+    def test_mixed_stale_and_fresh(self, db: Session):
+        """Only stale holdings are flagged; fresh ones are not."""
+        yesterday = date.today() - timedelta(days=1)
+        old_date = yesterday - timedelta(days=30)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(
+            db, datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+        )
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        _create_holding(db, sync_session, account, "DELIST", Decimal("100"), Decimal("50"), acct_snap)
+
+        sec_aapl = get_or_create_security(db, "AAPL")
+        sec_delist = get_or_create_security(db, "DELIST")
+
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=sec_aapl.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("155"),
+            market_value=Decimal("1550"),
+            price_date=yesterday,
+        ))
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=sec_delist.id,
+            ticker="DELIST",
+            quantity=Decimal("100"),
+            close_price=Decimal("50"),
+            market_value=Decimal("5000"),
+            price_date=old_date,
+        ))
+        db.commit()
+
+        service = PortfolioValuationService()
+        gaps = service.diagnose_gaps(db)
+        assert len(gaps) == 1
+        assert gaps[0]["stale_price_count"] == 1
+        assert gaps[0]["stale_prices"][0]["ticker"] == "DELIST"
+
+    def test_synthetic_ticker_not_flagged(self, db: Session):
+        """Synthetic tickers (non-tradable holdings) are never flagged as stale."""
+        yesterday = date.today() - timedelta(days=1)
+        old_date = yesterday - timedelta(days=60)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(
+            db, datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+        )
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "_SYN:abc123def456", Decimal("1"), Decimal("500000"), acct_snap)
+
+        security = get_or_create_security(db, "_SYN:abc123def456", "Primary Residence")
+        db.add(DailyHoldingValue(
+            valuation_date=yesterday,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="_SYN:abc123def456",
+            quantity=Decimal("1"),
+            close_price=Decimal("500000"),
+            market_value=Decimal("500000"),
+            price_date=old_date,
+        ))
+        db.commit()
+
+        service = PortfolioValuationService()
+        gaps = service.diagnose_gaps(db)
+        assert len(gaps) == 1
+        assert gaps[0]["stale_price_count"] == 0

@@ -37,6 +37,7 @@ const baseAccounts: AccountSummary[] = [
     balance_date: "2026-01-28T12:00:00Z",
     valuation_status: "ok",
     valuation_date: "2026-01-28",
+    stale_price_count: 0,
   },
   {
     id: "acc-2",
@@ -50,6 +51,7 @@ const baseAccounts: AccountSummary[] = [
     balance_date: null,
     valuation_status: "ok",
     valuation_date: "2026-01-28",
+    stale_price_count: 0,
   },
   {
     id: "acc-3",
@@ -63,6 +65,7 @@ const baseAccounts: AccountSummary[] = [
     balance_date: "2026-01-28T12:00:00Z",
     valuation_status: "ok",
     valuation_date: "2026-01-28",
+    stale_price_count: 0,
   },
   {
     id: "acc-4",
@@ -76,6 +79,7 @@ const baseAccounts: AccountSummary[] = [
     balance_date: null,
     valuation_status: "ok",
     valuation_date: "2026-01-28",
+    stale_price_count: 0,
   },
 ];
 
@@ -190,6 +194,7 @@ describe("AccountsTray", () => {
         balance_date: "2026-01-15T00:00:00Z",
         valuation_status: "ok",
         valuation_date: "2026-01-15",
+        stale_price_count: 0,
       },
     ];
 
@@ -225,6 +230,7 @@ describe("AccountsTray", () => {
           balance_date: "2026-01-15T00:00:00Z",
           valuation_status: "ok",
           valuation_date: "2026-01-15",
+          stale_price_count: 0,
         },
       ];
 
