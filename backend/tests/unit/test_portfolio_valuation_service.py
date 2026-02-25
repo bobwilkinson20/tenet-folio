@@ -2467,7 +2467,7 @@ class TestDiagnoseGapsStalePrice:
     def test_weekend_not_flagged(self, db: Session):
         """Weekend carry-forward (2 days) is NOT flagged as stale."""
         yesterday = date.today() - timedelta(days=1)
-        friday = yesterday - timedelta(days=2)  # 2-day gap
+        recent_price_date = yesterday - timedelta(days=2)  # 2-day gap
 
         account = _create_account(db)
         sync_session = _create_sync_session(
@@ -2486,7 +2486,7 @@ class TestDiagnoseGapsStalePrice:
             quantity=Decimal("10"),
             close_price=Decimal("150"),
             market_value=Decimal("1500"),
-            price_date=friday,
+            price_date=recent_price_date,
         ))
         db.commit()
 

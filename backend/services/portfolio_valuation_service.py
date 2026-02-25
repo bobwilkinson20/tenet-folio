@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple, Optional
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from models import Account, AccountSnapshot, DailyHoldingValue, Holding, SyncSession
 from models.asset_class import AssetClass
@@ -492,6 +492,7 @@ class PortfolioValuationService:
                 latest_val_date = max(actual_dates)
                 stale_q = (
                     db.query(DailyHoldingValue)
+                    .options(joinedload(DailyHoldingValue.security))
                     .filter(
                         DailyHoldingValue.account_id == account.id,
                         DailyHoldingValue.valuation_date == latest_val_date,
