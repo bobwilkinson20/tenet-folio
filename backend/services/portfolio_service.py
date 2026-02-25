@@ -564,44 +564,50 @@ class PortfolioService:
         if not holdings:
             return
 
-        # Group holdings by account_id
-        by_account: dict[str, list[dict]] = {}
-        for h in holdings:
-            by_account.setdefault(h["account_id"], []).append(h)
+        try:
+            # Group holdings by account_id
+            by_account: dict[str, list[dict]] = {}
+            for h in holdings:
+                by_account.setdefault(h["account_id"], []).append(h)
 
-        for account_id, account_holdings in by_account.items():
-            # Build market_prices and total_quantities from stored DHV data
-            market_prices: dict[str, Decimal] = {}
-            total_quantities: dict[str, Decimal] = {}
-            for h in account_holdings:
-                sid = h["_security_id"]
-                if h["_close_price"] is not None:
-                    market_prices[sid] = h["_close_price"]
-                if h["_quantity"] is not None:
-                    total_quantities[sid] = h["_quantity"]
+            for account_id, account_holdings in by_account.items():
+                # Build market_prices and total_quantities from stored DHV data
+                market_prices: dict[str, Decimal] = {}
+                total_quantities: dict[str, Decimal] = {}
+                for h in account_holdings:
+                    sid = h["_security_id"]
+                    if sid is None:
+                        continue
+                    if h["_close_price"] is not None:
+                        market_prices[sid] = h["_close_price"]
+                    if h["_quantity"] is not None:
+                        total_quantities[sid] = h["_quantity"]
 
-            lot_summaries = LotLedgerService.get_lot_summaries_for_account(
-                db, account_id,
-                market_prices=market_prices,
-                total_quantities=total_quantities,
-            )
+                lot_summaries = LotLedgerService.get_lot_summaries_for_account(
+                    db, account_id,
+                    market_prices=market_prices,
+                    total_quantities=total_quantities,
+                )
 
-            for h in account_holdings:
-                lot_summary = lot_summaries.get(h["_security_id"])
-                if lot_summary and lot_summary["lot_count"] > 0:
-                    cost_basis = lot_summary["total_cost_basis"]
-                    unrealized = lot_summary.get("unrealized_gain_loss")
-                    h["cost_basis"] = cost_basis
-                    h["gain_loss"] = unrealized
-                    h["lot_coverage"] = lot_summary.get("lot_coverage")
-                    h["lot_count"] = lot_summary["lot_count"]
-                    if unrealized is not None and cost_basis and cost_basis != 0:
-                        h["gain_loss_percent"] = unrealized / cost_basis
-                    else:
-                        h["gain_loss_percent"] = None
-
-        # Clean up internal keys
-        for h in holdings:
-            del h["_security_id"]
-            del h["_close_price"]
-            del h["_quantity"]
+                for h in account_holdings:
+                    sid = h["_security_id"]
+                    if sid is None:
+                        continue
+                    lot_summary = lot_summaries.get(sid)
+                    if lot_summary and lot_summary["lot_count"] > 0:
+                        cost_basis = lot_summary["total_cost_basis"]
+                        unrealized = lot_summary.get("unrealized_gain_loss")
+                        h["cost_basis"] = cost_basis
+                        h["gain_loss"] = unrealized
+                        h["lot_coverage"] = lot_summary.get("lot_coverage")
+                        h["lot_count"] = lot_summary["lot_count"]
+                        if unrealized is not None and cost_basis and cost_basis != 0:
+                            h["gain_loss_percent"] = unrealized / cost_basis
+                        else:
+                            h["gain_loss_percent"] = None
+        finally:
+            # Always clean up internal keys, even if lot lookup raises
+            for h in holdings:
+                h.pop("_security_id", None)
+                h.pop("_close_price", None)
+                h.pop("_quantity", None)

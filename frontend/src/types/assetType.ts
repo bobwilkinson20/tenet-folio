@@ -77,11 +77,11 @@ export interface AssetTypeHolding {
   ticker: string;
   security_name: string | null;
   market_value: string; // Decimal comes as string from API
-  cost_basis?: string | null;
-  gain_loss?: string | null;
-  gain_loss_percent?: string | null;
-  lot_coverage?: string | null;
-  lot_count?: number | null;
+  cost_basis: string | null;
+  gain_loss: string | null;
+  gain_loss_percent: string | null;
+  lot_coverage: string | null;
+  lot_count: number | null;
 }
 
 export interface AssetTypeHoldingsDetail {

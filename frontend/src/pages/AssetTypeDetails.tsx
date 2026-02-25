@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { assetTypeApi } from "../api/assetTypes";
 import { isSyntheticTicker } from "@/utils/ticker";
@@ -200,9 +200,9 @@ export function AssetTypeDetailsPage() {
 }
 
 function CostBasisCell({ costBasis, lotCoverage, lotCount }: {
-  costBasis?: string | null;
-  lotCoverage?: string | number | null;
-  lotCount?: number | null;
+  costBasis: string | null;
+  lotCoverage: string | number | null;
+  lotCount: number | null;
 }) {
   if (lotCount == null || lotCount <= 0) {
     return <span className="text-tf-text-tertiary">-</span>;
@@ -220,9 +220,9 @@ function CostBasisCell({ costBasis, lotCoverage, lotCount }: {
 }
 
 function GainLossCell({ gainLoss, gainLossPercent, lotCount }: {
-  gainLoss?: string | number | null;
-  gainLossPercent?: string | number | null;
-  lotCount?: number | null;
+  gainLoss: string | number | null;
+  gainLossPercent: string | number | null;
+  lotCount: number | null;
 }) {
   if (lotCount == null || lotCount <= 0 || gainLoss == null) {
     return <span className="text-tf-text-tertiary">-</span>;
@@ -231,7 +231,7 @@ function GainLossCell({ gainLoss, gainLossPercent, lotCount }: {
   return (
     <div>
       <div className={glNum >= 0 ? "text-tf-positive" : "text-tf-negative"}>
-        {typeof gainLoss === "number" ? formatCurrency(gainLoss) : formatCurrency(gainLoss)}
+        {formatCurrency(gainLoss)}
       </div>
       {gainLossPercent != null && (
         <div className={`text-xs ${Number(gainLossPercent) >= 0 ? "text-tf-positive" : "text-tf-negative"}`}>
@@ -246,7 +246,7 @@ function GainLossCell({ gainLoss, gainLossPercent, lotCount }: {
 function SingleHoldingRow({ group, hasCostBasis }: { group: HoldingGroup; hasCostBasis: boolean }) {
   const h = group.holdings[0];
   return (
-    <tr key={group.ticker}>
+    <tr>
       <td className="px-6 py-4 text-sm font-medium text-tf-text-primary">
         {isSyntheticTicker(group.ticker) ? "\u2014" : group.ticker}
       </td>
@@ -280,7 +280,7 @@ function SingleHoldingRow({ group, hasCostBasis }: { group: HoldingGroup; hasCos
 
 function MultiHoldingGroup({ group, hasCostBasis }: { group: HoldingGroup; hasCostBasis: boolean }) {
   return (
-    <Fragment key={group.ticker}>
+    <>
       <tr className="bg-tf-bg-secondary">
         <td className="px-6 py-3 text-sm font-bold text-tf-text-primary">
           {isSyntheticTicker(group.ticker) ? "\u2014" : group.ticker}
@@ -341,6 +341,6 @@ function MultiHoldingGroup({ group, hasCostBasis }: { group: HoldingGroup; hasCo
           )}
         </tr>
       ))}
-    </Fragment>
+    </>
   );
 }
