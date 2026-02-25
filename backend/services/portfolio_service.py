@@ -605,8 +605,13 @@ class PortfolioService:
                             h["gain_loss_percent"] = unrealized / cost_basis
                         else:
                             h["gain_loss_percent"] = None
+        except Exception:
+            logger.warning(
+                "Failed to enrich holdings with lot data; continuing without it",
+                exc_info=True,
+            )
         finally:
-            # Always clean up internal keys, even if lot lookup raises
+            # Always clean up internal keys
             for h in holdings:
                 h.pop("_security_id", None)
                 h.pop("_close_price", None)
