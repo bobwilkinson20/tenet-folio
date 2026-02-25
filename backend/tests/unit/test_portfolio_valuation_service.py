@@ -12,16 +12,22 @@ from models import Security
 from models.asset_class import AssetClass
 from services.portfolio_valuation_service import (
     CASH_TICKERS,
+    PRICE_SOURCE_CARRY_FORWARD,
+    PRICE_SOURCE_CASH,
+    PRICE_SOURCE_CORRECTED,
+    PRICE_SOURCE_MARKET,
+    PRICE_SOURCE_SNAPSHOT,
     STALE_PRICE_DAYS,
     HoldingSummary,
     PortfolioValuationService,
     PriceWithDate,
     SnapshotWindow,
+    ValuationResult,
     build_price_lookup,
     is_cash_equivalent,
 )
 from tests.fixtures import get_or_create_security
-from utils.ticker import ZERO_BALANCE_TICKER
+from utils.ticker import SYNTHETIC_PREFIX, ZERO_BALANCE_TICKER
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +155,8 @@ class TestBuildPriceLookup:
         lookup = build_price_lookup(
             market_data, date(2025, 1, 6), date(2025, 1, 7)
         )
-        assert lookup["AAPL"][date(2025, 1, 6)] == PriceWithDate(Decimal("150"), date(2025, 1, 6))
-        assert lookup["AAPL"][date(2025, 1, 7)] == PriceWithDate(Decimal("152"), date(2025, 1, 7))
+        assert lookup["AAPL"][date(2025, 1, 6)] == PriceWithDate(Decimal("150"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        assert lookup["AAPL"][date(2025, 1, 7)] == PriceWithDate(Decimal("152"), date(2025, 1, 7), PRICE_SOURCE_MARKET)
 
     def test_carry_forward_over_weekend(self):
         """Friday's price carries forward through Saturday and Sunday with Friday's price_date."""
@@ -867,8 +873,8 @@ class TestCalculateDay:
 
         price_lookup = {
             "AAPL": {
-                date(2025, 1, 5): PriceWithDate(Decimal("145"), date(2025, 1, 5)),
-                date(2025, 1, 10): PriceWithDate(Decimal("155"), date(2025, 1, 10)),
+                date(2025, 1, 5): PriceWithDate(Decimal("145"), date(2025, 1, 5), PRICE_SOURCE_MARKET),
+                date(2025, 1, 10): PriceWithDate(Decimal("155"), date(2025, 1, 10), PRICE_SOURCE_MARKET),
             },
         }
 
@@ -1066,7 +1072,9 @@ class TestBackfillUpsert:
         rows = db.query(DailyHoldingValue).order_by(DailyHoldingValue.valuation_date).all()
         assert len(rows) == 2
         assert rows[0].valuation_date == day_before
-        assert rows[0].close_price == Decimal("150")  # untouched
+        # Retrospective validation corrects legacy NULL-source row with fresh market data
+        assert rows[0].close_price == Decimal("152")
+        assert rows[0].price_source == PRICE_SOURCE_CORRECTED
         assert rows[1].valuation_date == yesterday
         assert rows[1].close_price == Decimal("155")
 
@@ -2248,14 +2256,14 @@ class TestGetPriceForHoldingPriceDate:
         result = PortfolioValuationService._get_price_for_holding(
             {}, "USD", date(2025, 6, 15), Decimal("1"),
         )
-        assert result == PriceWithDate(Decimal("1"), date(2025, 6, 15))
+        assert result == PriceWithDate(Decimal("1"), date(2025, 6, 15), PRICE_SOURCE_CASH)
 
     def test_market_price_uses_lookup_price_date(self):
         """When market price is available, price_date comes from lookup."""
         lookup = {
             "AAPL": {
                 # Weekend carry-forward: Monday lookup has Friday's price_date
-                date(2025, 1, 6): PriceWithDate(Decimal("155"), date(2025, 1, 3)),
+                date(2025, 1, 6): PriceWithDate(Decimal("155"), date(2025, 1, 3), PRICE_SOURCE_CARRY_FORWARD),
             },
         }
         result = PortfolioValuationService._get_price_for_holding(
@@ -2263,6 +2271,7 @@ class TestGetPriceForHoldingPriceDate:
         )
         assert result.price == Decimal("155")
         assert result.price_date == date(2025, 1, 3)  # Friday, not Monday
+        assert result.source == PRICE_SOURCE_CARRY_FORWARD
 
     def test_snapshot_fallback_uses_effective_date(self):
         """When falling back to snapshot price, price_date == snapshot_effective_date."""
@@ -2272,6 +2281,7 @@ class TestGetPriceForHoldingPriceDate:
         )
         assert result.price == Decimal("25.50")
         assert result.price_date == date(2025, 6, 10)
+        assert result.source == PRICE_SOURCE_SNAPSHOT
 
     def test_snapshot_fallback_no_effective_date(self):
         """Without snapshot_effective_date, fallback uses target_date."""
@@ -2280,6 +2290,7 @@ class TestGetPriceForHoldingPriceDate:
         )
         assert result.price == Decimal("25.50")
         assert result.price_date == date(2025, 6, 15)
+        assert result.source == PRICE_SOURCE_SNAPSHOT
 
 
 # ---------------------------------------------------------------------------
@@ -2601,3 +2612,807 @@ class TestDiagnoseGapsStalePrice:
         gaps = service.diagnose_gaps(db)
         assert len(gaps) == 1
         assert gaps[0]["stale_price_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: Price Source Tracking
+# ---------------------------------------------------------------------------
+class TestPriceSourceTracking:
+    """Tests for price source field on PriceWithDate and DHV rows."""
+
+    def test_build_price_lookup_tags_market_on_trading_day(self):
+        """Prices on actual trading days are tagged as 'market'."""
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", date(2025, 1, 6), Decimal("150"), "mock"),
+            ]
+        }
+        lookup = build_price_lookup(market_data, date(2025, 1, 6), date(2025, 1, 6))
+        assert lookup["AAPL"][date(2025, 1, 6)].source == PRICE_SOURCE_MARKET
+
+    def test_build_price_lookup_tags_carry_forward_on_weekend(self):
+        """Weekend carry-forward prices are tagged as 'carry_forward'."""
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", date(2025, 1, 3), Decimal("150"), "mock"),  # Fri
+            ]
+        }
+        lookup = build_price_lookup(market_data, date(2025, 1, 3), date(2025, 1, 5))
+        assert lookup["AAPL"][date(2025, 1, 3)].source == PRICE_SOURCE_MARKET
+        assert lookup["AAPL"][date(2025, 1, 4)].source == PRICE_SOURCE_CARRY_FORWARD  # Sat
+        assert lookup["AAPL"][date(2025, 1, 5)].source == PRICE_SOURCE_CARRY_FORWARD  # Sun
+
+    def test_cash_holding_gets_cash_source(self):
+        """Cash equivalents return PRICE_SOURCE_CASH."""
+        result = PortfolioValuationService._get_price_for_holding(
+            {}, "USD", date(2025, 6, 15), Decimal("1"),
+        )
+        assert result.source == PRICE_SOURCE_CASH
+
+    def test_snapshot_fallback_gets_snapshot_source(self):
+        """When no market data exists, fallback returns PRICE_SOURCE_SNAPSHOT."""
+        result = PortfolioValuationService._get_price_for_holding(
+            {}, "PRIVCO", date(2025, 6, 15), Decimal("25.50"),
+        )
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
+    def test_backfill_writes_price_source_to_dhv(self, db: Session):
+        """Backfill writes price_source on each DHV row."""
+        yesterday = date.today() - timedelta(days=1)
+        snap_dt = datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.commit()
+
+        prices = {"AAPL": {yesterday: Decimal("155")}}
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        row = db.query(DailyHoldingValue).first()
+        assert row is not None
+        assert row.price_source == PRICE_SOURCE_MARKET
+
+    def test_sentinel_gets_cash_source(self, db: Session):
+        """Zero-balance sentinel rows get price_source == PRICE_SOURCE_CASH."""
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, datetime.now(timezone.utc))
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        db.commit()
+
+        today = date.today()
+        dhv = PortfolioValuationService.write_zero_balance_sentinel(
+            db, account.id, acct_snap.id, today
+        )
+        db.flush()
+
+        assert dhv.price_source == PRICE_SOURCE_CASH
+
+    def test_sync_creates_snapshot_source(self, db: Session):
+        """create_daily_values_for_holdings sets price_source."""
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, datetime.now(timezone.utc))
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        h = _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.flush()
+
+        today = date.today()
+        rows = PortfolioValuationService.create_daily_values_for_holdings(
+            db, [h], today, account_id=account.id
+        )
+        db.flush()
+
+        assert len(rows) == 1
+        assert rows[0].price_source == PRICE_SOURCE_SNAPSHOT
+
+    def test_sync_creates_cash_source_for_cash_holding(self, db: Session):
+        """create_daily_values_for_holdings sets CASH source for cash tickers."""
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, datetime.now(timezone.utc))
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        h = _create_holding(db, sync_session, account, "USD", Decimal("5000"), Decimal("1"), acct_snap)
+        db.flush()
+
+        today = date.today()
+        rows = PortfolioValuationService.create_daily_values_for_holdings(
+            db, [h], today, account_id=account.id
+        )
+        db.flush()
+
+        assert len(rows) == 1
+        assert rows[0].price_source == PRICE_SOURCE_CASH
+
+
+# ---------------------------------------------------------------------------
+# Tests: Price Guards
+# ---------------------------------------------------------------------------
+class TestPriceGuards:
+    """Tests for the _validate_price static method."""
+
+    def test_zero_price_rejected(self):
+        """Zero price is rejected, falls back to snapshot."""
+        price_info = PriceWithDate(Decimal("0"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"), snapshot_effective_date=date(2025, 1, 5),
+        )
+        assert result.price == Decimal("150")
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
+    def test_negative_price_rejected(self):
+        """Negative price is rejected, falls back to snapshot."""
+        price_info = PriceWithDate(Decimal("-5"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"), snapshot_effective_date=date(2025, 1, 5),
+        )
+        assert result.price == Decimal("150")
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
+    def test_normal_price_accepted(self):
+        """Normal price within band passes through unchanged."""
+        price_info = PriceWithDate(Decimal("155"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"), prior_close=Decimal("150"),
+        )
+        assert result.price == Decimal("155")
+        assert result.source == PRICE_SOURCE_MARKET
+
+    def test_equity_spike_rejected(self):
+        """100x equity spike is rejected."""
+        price_info = PriceWithDate(Decimal("15000"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"), prior_close=Decimal("150"),
+        )
+        assert result.price == Decimal("150")
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
+    def test_equity_crash_rejected(self):
+        """1/100x equity crash is rejected."""
+        price_info = PriceWithDate(Decimal("1.50"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"),
+            snapshot_effective_date=date(2025, 1, 5),
+            prior_close=Decimal("150"),
+        )
+        assert result.price == Decimal("150")
+        assert result.source == PRICE_SOURCE_SNAPSHOT
+
+    def test_crypto_wider_band(self):
+        """Crypto uses wider band — 50x is accepted (within 100x band)."""
+        price_info = PriceWithDate(Decimal("2100000"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "BTC", date(2025, 1, 6),
+            Decimal("42000"), prior_close=Decimal("42000"), is_crypto=True,
+        )
+        assert result.price == Decimal("2100000")  # 50x, within crypto band
+
+    def test_no_prior_close_skips_ratio_check(self):
+        """Without prior_close, ratio check is skipped."""
+        price_info = PriceWithDate(Decimal("15000"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"),
+        )
+        # No prior close → ratio check skipped → price accepted
+        assert result.price == Decimal("15000")
+
+    def test_prior_close_zero_skips_ratio_check(self):
+        """Zero prior_close skips ratio check."""
+        price_info = PriceWithDate(Decimal("155"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        result = PortfolioValuationService._validate_price(
+            price_info, "AAPL", date(2025, 1, 6),
+            Decimal("150"), prior_close=Decimal("0"),
+        )
+        assert result.price == Decimal("155")
+
+    def test_backfill_progressive_prior_close_update(self, db: Session):
+        """Multi-day backfill uses progressive prior close chaining."""
+        yesterday = date.today() - timedelta(days=1)
+        day_before = yesterday - timedelta(days=1)
+        snap_dt = datetime.combine(day_before, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.commit()
+
+        prices = {
+            "AAPL": {
+                day_before: Decimal("155"),
+                yesterday: Decimal("160"),
+            }
+        }
+        service = _make_mock_service(prices)
+        result = service.backfill(db)
+
+        assert result.dates_calculated == 2
+        rows = (
+            db.query(DailyHoldingValue)
+            .order_by(DailyHoldingValue.valuation_date)
+            .all()
+        )
+        assert len(rows) == 2
+        assert rows[0].close_price == Decimal("155")
+        assert rows[1].close_price == Decimal("160")
+
+    def test_price_guard_logs_warning(self, db: Session, caplog):
+        """Price guard rejection logs a warning."""
+        import logging
+        price_info = PriceWithDate(Decimal("0"), date(2025, 1, 6), PRICE_SOURCE_MARKET)
+        with caplog.at_level(logging.WARNING):
+            PortfolioValuationService._validate_price(
+                price_info, "AAPL", date(2025, 1, 6), Decimal("150"),
+            )
+        assert "Price guard" in caplog.text
+        assert "non-positive" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Tests: Retrospective Validation
+# ---------------------------------------------------------------------------
+class TestRetrospectiveValidation:
+    """Tests for the _retrospective_validate method."""
+
+    def _setup_dhv_with_source(
+        self, db: Session, account, acct_snap, ticker, val_date,
+        close_price, market_value, price_source=None, price_date=None,
+    ) -> DailyHoldingValue:
+        """Helper to create a DHV row with a specific price_source."""
+        security = get_or_create_security(db, ticker)
+        dhv = DailyHoldingValue(
+            valuation_date=val_date,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker=ticker,
+            quantity=Decimal("10"),
+            close_price=close_price,
+            market_value=market_value,
+            price_date=price_date or val_date,
+            price_source=price_source,
+        )
+        db.add(dhv)
+        return dhv
+
+    def test_corrects_snapshot_fallback_with_market_data(self, db: Session):
+        """Snapshot-sourced DHV rows are corrected when market data becomes available."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        # Market data now shows the real price
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+        db.flush()
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("155")
+        assert dhv.price_source == PRICE_SOURCE_CORRECTED
+        assert result.corrections == 1
+
+    def test_corrects_carry_forward_with_market_data(self, db: Session):
+        """Carry-forward DHV rows are corrected when market data becomes available."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("148"), Decimal("1480"), PRICE_SOURCE_CARRY_FORWARD,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("155")
+        assert dhv.price_source == PRICE_SOURCE_CORRECTED
+        assert result.corrections == 1
+
+    def test_corrects_null_price_source_as_legacy(self, db: Session):
+        """NULL price_source (legacy rows) are always corrected."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), None,  # legacy NULL
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("155")
+        assert dhv.price_source == PRICE_SOURCE_CORRECTED
+
+    def test_corrects_market_price_beyond_threshold(self, db: Session):
+        """Market-sourced DHV rows are corrected when deviation exceeds threshold."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        # Stored market price differs by > 1% from fresh
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_MARKET,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),  # 3.3% deviation
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("155")
+        assert dhv.price_source == PRICE_SOURCE_CORRECTED
+        assert result.corrections == 1
+
+    def test_skips_market_price_within_threshold(self, db: Session):
+        """Market-sourced DHV rows within threshold are not corrected."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        # Stored market price is very close to fresh (0.1% deviation)
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_MARKET,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("150.10"), "mock"),  # 0.07%
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("150")  # unchanged
+        assert dhv.price_source == PRICE_SOURCE_MARKET
+        assert result.corrections == 0
+
+    def test_crypto_uses_wider_threshold(self, db: Session):
+        """Crypto uses 5% threshold — 3% deviation is not corrected."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+
+        crypto_class = AssetClass(name="Crypto", target_percent=Decimal("10"))
+        db.add(crypto_class)
+        db.flush()
+        btc_sec = Security(ticker="BTC", name="Bitcoin", manual_asset_class_id=crypto_class.id)
+        db.add(btc_sec)
+        db.flush()
+
+        h = Holding(
+            account_snapshot_id=acct_snap.id, security_id=btc_sec.id,
+            ticker="BTC", quantity=Decimal("0.5"),
+            snapshot_price=Decimal("42000"), snapshot_value=Decimal("21000"),
+        )
+        db.add(h)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "BTC", retro_date,
+            Decimal("42000"), Decimal("420000"), PRICE_SOURCE_MARKET,
+        )
+        db.commit()
+
+        market_data = {
+            "BTC": [
+                PriceResult("BTC", retro_date, Decimal("43200"), "mock"),  # 2.86% — under 5%
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], {"BTC"}, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).filter(
+            DailyHoldingValue.ticker == "BTC"
+        ).first()
+        assert dhv.close_price == Decimal("42000")  # unchanged
+        assert result.corrections == 0
+
+    def test_skips_cash_tickers(self, db: Session):
+        """Cash equivalent tickers are not corrected by retro validation."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "USD", Decimal("5000"), Decimal("1"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "USD", retro_date,
+            Decimal("1"), Decimal("5000"), PRICE_SOURCE_CASH,
+        )
+        db.commit()
+
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, {}, [account.id], None, result,
+        )
+        assert result.corrections == 0
+
+    def test_skips_synthetic_tickers(self, db: Session):
+        """Synthetic tickers are not corrected by retro validation."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        syn_ticker = f"{SYNTHETIC_PREFIX}abc123"
+        _create_holding(db, sync_session, account, syn_ticker, Decimal("1"), Decimal("500000"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, syn_ticker, retro_date,
+            Decimal("500000"), Decimal("500000"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, {}, [account.id], None, result,
+        )
+        assert result.corrections == 0
+
+    def test_skips_when_no_fresh_market_data(self, db: Session):
+        """No correction when no fresh market data exists for the ticker."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        # No market data provided
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, {}, [account.id], None, result,
+        )
+        assert result.corrections == 0
+
+    def test_only_uses_fresh_market_data_not_carry_forward(self, db: Session):
+        """Retro validation only corrects with actual market data, not carry-forward."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        # Market data only on day before retro_date (will be carry-forward on retro_date)
+        market_trade_date = retro_date - timedelta(days=1)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        # Only a price on market_trade_date, not on retro_date itself
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", market_trade_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        # Should NOT correct because the retro_date data is carry-forward
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.close_price == Decimal("150")
+        assert result.corrections == 0
+
+    def test_correction_updates_market_value(self, db: Session):
+        """Correction recalculates market_value using quantity * new price."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+
+        dhv = db.query(DailyHoldingValue).first()
+        assert dhv.market_value == Decimal("1550.00")  # 10 * 155
+
+    def test_correction_logged_at_info(self, db: Session, caplog):
+        """Corrections are logged at INFO level."""
+        import logging
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        with caplog.at_level(logging.INFO):
+            service._retrospective_validate(
+                db, yesterday, market_data, [account.id], None, result,
+            )
+        assert "Corrected AAPL" in caplog.text
+
+    def test_correction_count_in_result(self, db: Session):
+        """ValuationResult tracks correction count and details."""
+        yesterday = date.today() - timedelta(days=1)
+        retro_date = yesterday - timedelta(days=2)
+        snap_dt = datetime.combine(retro_date, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        self._setup_dhv_with_source(
+            db, account, acct_snap, "AAPL", retro_date,
+            Decimal("150"), Decimal("1500"), PRICE_SOURCE_SNAPSHOT,
+        )
+        db.commit()
+
+        market_data = {
+            "AAPL": [
+                PriceResult("AAPL", retro_date, Decimal("155"), "mock"),
+            ]
+        }
+        result = ValuationResult()
+        service = PortfolioValuationService()
+        service._retrospective_validate(
+            db, yesterday, market_data, [account.id], None, result,
+        )
+        assert result.corrections == 1
+        assert len(result.correction_details) == 1
+        assert "AAPL" in result.correction_details[0]
+
+    def test_no_retro_on_first_backfill(self, db: Session):
+        """No retro validation when there are no prior DHV rows."""
+        yesterday = date.today() - timedelta(days=1)
+        snap_dt = datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        db.commit()
+
+        prices = {"AAPL": {yesterday: Decimal("155")}}
+        service = _make_mock_service(prices)
+        result = service.backfill(db)
+
+        # First backfill — no prior rows to correct
+        assert result.corrections == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: End-to-End
+# ---------------------------------------------------------------------------
+class TestEndToEnd:
+    """End-to-end tests combining price guards and retrospective validation."""
+
+    def test_bad_price_rejected_then_corrected_next_run(self, db: Session):
+        """A bad price is rejected by guards, then corrected on next backfill."""
+        yesterday = date.today() - timedelta(days=1)
+        day_before = yesterday - timedelta(days=1)
+        snap_dt = datetime.combine(day_before, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+
+        # Create a prior DHV row to seed the prior_close
+        security = get_or_create_security(db, "AAPL")
+        prior_date = day_before - timedelta(days=1)
+        db.add(DailyHoldingValue(
+            valuation_date=prior_date,
+            account_id=account.id,
+            account_snapshot_id=acct_snap.id,
+            security_id=security.id,
+            ticker="AAPL",
+            quantity=Decimal("10"),
+            close_price=Decimal("150"),
+            market_value=Decimal("1500"),
+            price_source=PRICE_SOURCE_MARKET,
+        ))
+        db.commit()
+
+        # First backfill: day_before has a bad price (100x spike)
+        # Yesterday has correct price
+        prices = {
+            "AAPL": {
+                day_before: Decimal("15000"),  # 100x spike — will be rejected
+                yesterday: Decimal("155"),
+            }
+        }
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        # The bad price should be rejected; snapshot fallback ($150) used
+        day_before_row = (
+            db.query(DailyHoldingValue)
+            .filter(
+                DailyHoldingValue.valuation_date == day_before,
+                DailyHoldingValue.ticker == "AAPL",
+            )
+            .first()
+        )
+        assert day_before_row.close_price == Decimal("150")  # snapshot fallback
+        assert day_before_row.price_source == PRICE_SOURCE_SNAPSHOT
+
+    def test_all_price_sources_set_correctly(self, db: Session):
+        """All DHV rows get appropriate price_source values."""
+        yesterday = date.today() - timedelta(days=1)
+        day_before = yesterday - timedelta(days=1)
+        snap_dt = datetime.combine(day_before, time(12, 0), tzinfo=timezone.utc)
+
+        account = _create_account(db)
+        sync_session = _create_sync_session(db, snap_dt)
+        acct_snap = _create_account_snapshot(db, account, sync_session)
+
+        # Equity with market data
+        _create_holding(db, sync_session, account, "AAPL", Decimal("10"), Decimal("150"), acct_snap)
+        # Cash holding
+        _create_holding(db, sync_session, account, "USD", Decimal("5000"), Decimal("1"), acct_snap)
+        # No market data available — will use snapshot fallback
+        _create_holding(db, sync_session, account, "PRIVCO", Decimal("100"), Decimal("25"), acct_snap)
+        db.commit()
+
+        prices = {
+            "AAPL": {
+                day_before: Decimal("152"),
+                yesterday: Decimal("155"),
+            },
+            # No prices for PRIVCO
+        }
+        service = _make_mock_service(prices)
+        service.backfill(db)
+
+        rows = db.query(DailyHoldingValue).order_by(
+            DailyHoldingValue.valuation_date,
+            DailyHoldingValue.ticker,
+        ).all()
+
+        sources_by_ticker = {}
+        for row in rows:
+            if row.ticker not in sources_by_ticker:
+                sources_by_ticker[row.ticker] = set()
+            sources_by_ticker[row.ticker].add(row.price_source)
+
+        assert PRICE_SOURCE_MARKET in sources_by_ticker["AAPL"]
+        assert PRICE_SOURCE_CASH in sources_by_ticker["USD"]
+        assert PRICE_SOURCE_SNAPSHOT in sources_by_ticker["PRIVCO"]

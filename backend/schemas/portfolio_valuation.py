@@ -41,6 +41,7 @@ class StalePriceInfo(BaseModel):
     age_days: int
     close_price: Decimal
     market_value: Decimal
+    price_source: Optional[str] = None
 
 
 class AccountDHVDiagnostic(BaseModel):
