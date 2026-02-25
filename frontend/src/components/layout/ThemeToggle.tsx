@@ -1,3 +1,4 @@
+import type { ComponentType, SVGProps } from "react";
 import {
   ComputerDesktopIcon,
   SunIcon,
@@ -7,7 +8,7 @@ import { useTheme, type ThemeMode } from "@/hooks/useTheme";
 
 const CYCLE: ThemeMode[] = ["system", "light", "dark"];
 
-const ICONS: Record<ThemeMode, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
+const ICONS: Record<ThemeMode, ComponentType<SVGProps<SVGSVGElement>>> = {
   system: ComputerDesktopIcon,
   light: SunIcon,
   dark: MoonIcon,
