@@ -190,6 +190,9 @@ class IBKRFlexClient:
         parent_ids = self._get_parent_account_ids(response)
         holdings = []
         for stmt in response.FlexStatements:
+            # account_id should be a top-level ID (e.g. "U1203437"), not a
+            # sub-account (e.g. "U1203437-P"); sub-account positions are
+            # normalized to the parent after mapping.
             if account_id and stmt.accountId != account_id:
                 continue
 
