@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 from typing import Literal
 from sqlalchemy import and_, func, or_
@@ -198,7 +198,7 @@ class PortfolioService:
                 dhv_count_by_account[row.account_id] = row.cnt
 
         result: dict[str, AccountValuationInfo] = {}
-        today = datetime.now(timezone.utc).date()
+        today = date.today()
 
         for account_id in snap_id_map:
             val_date = daily_dates.get(account_id)

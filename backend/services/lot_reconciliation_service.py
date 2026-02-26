@@ -12,6 +12,8 @@ from decimal import Decimal
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
+from utils.datetime import utc_to_local_date
+
 from models import (
     Account,
     AccountSnapshot,
@@ -415,7 +417,7 @@ def _get_sell_date(
         if sell.activity_date:
             return sell.activity_date.date()
 
-    return sync_session.timestamp.date()
+    return utc_to_local_date(sync_session.timestamp)
 
 
 def _apply_fifo_disposal(

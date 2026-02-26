@@ -1,7 +1,7 @@
 """Account management service."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -88,7 +88,7 @@ class AccountService:
             return account
 
         now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
 
         if create_closing_snapshot:
             # Check whether the account already has a zero-balance DHV for today

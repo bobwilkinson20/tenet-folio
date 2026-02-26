@@ -84,6 +84,11 @@ def my_endpoint(db: Session = Depends(get_db)):
     ...
 ```
 
+**Date extraction from UTC timestamps:** Timestamps in SQLite are naive UTC. Never call `.date()` on a UTC datetime when you need the local calendar date — it can be off by a day (e.g., 5 PM PT on Feb 10 → Feb 11 01:00 UTC → `.date()` returns Feb 11). Use these instead:
+- `date.today()` — when you need "today" in local time (e.g., throttle checks, "as of" labels)
+- `utc_to_local_date(utc_dt)` from `utils.datetime` — when converting a stored UTC timestamp to the local date it represents (e.g., determining which calendar day a sync occurred on)
+- `.date()` is safe only when the caller controls the input and intentionally wants the UTC date (e.g., API range boundaries)
+
 **Logging:** All services must use Python's `logging` module. Every CRUD operation (create, update, delete) and sync lifecycle event should log at INFO level. Use `logger = logging.getLogger(__name__)` at module level. Centralized config is in `backend/logging_config.py`; noisy third-party loggers (SQLAlchemy, httpx, yfinance, etc.) are suppressed to WARNING.
 
 ### Frontend

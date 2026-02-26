@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple, Optional
 
@@ -13,6 +13,7 @@ from models import Account, AccountSnapshot, DailyHoldingValue, Holding, SyncSes
 from models.asset_class import AssetClass
 from models.security import Security
 from services.market_data_service import MarketDataService
+from utils.datetime import utc_to_local_date
 from services.security_service import SecurityService
 from utils.ticker import SYNTHETIC_PREFIX, ZERO_BALANCE_TICKER
 
@@ -367,7 +368,7 @@ class PortfolioValuationService:
             logger.info("No completed sync sessions — skipping full backfill")
             return ValuationResult()
 
-        start_date = self._utc_to_local_date(first_session.timestamp)
+        start_date = utc_to_local_date(first_session.timestamp)
         end_date = date.today() - timedelta(days=1)
         if start_date > end_date:
             return ValuationResult()
@@ -412,7 +413,7 @@ class PortfolioValuationService:
             if first_snap is None:
                 continue
 
-            expected_start = self._utc_to_local_date(first_snap.sync_session.timestamp)
+            expected_start = utc_to_local_date(first_snap.sync_session.timestamp)
 
             # Active accounts should have DHV through yesterday.
             # Inactive accounts should have DHV through their last snapshot.
@@ -430,7 +431,7 @@ class PortfolioValuationService:
                     .order_by(SyncSession.timestamp.desc())
                     .first()
                 )
-                expected_end = self._utc_to_local_date(last_snap.sync_session.timestamp)
+                expected_end = utc_to_local_date(last_snap.sync_session.timestamp)
 
             if expected_start > expected_end:
                 continue
@@ -788,26 +789,13 @@ class PortfolioValuationService:
                 )
                 if first_snap is not None:
                     per_account_maxes.append(
-                        self._utc_to_local_date(first_snap.sync_session.timestamp)
+                        utc_to_local_date(first_snap.sync_session.timestamp)
                     )
 
         if not per_account_maxes:
             return None
 
         return min(per_account_maxes)
-
-    @staticmethod
-    def _utc_to_local_date(utc_dt: datetime) -> date:
-        """Convert a naive-UTC datetime to a local calendar date.
-
-        SyncSession timestamps are stored as naive UTC in SQLite.
-        date.today() returns the local date. We need local dates when
-        comparing to avoid off-by-one errors (e.g., 5 PM PT on Feb 10
-        is stored as Feb 11 01:00 UTC).
-        """
-        if utc_dt.tzinfo is None:
-            utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-        return utc_dt.astimezone().date()
 
     def _resolve_account_timelines(
         self,
@@ -846,7 +834,7 @@ class PortfolioValuationService:
             transition_snaps: list[tuple[AccountSnapshot, date]] = []
 
             for snap in all_snaps:
-                local_date = self._utc_to_local_date(snap.sync_session.timestamp)
+                local_date = utc_to_local_date(snap.sync_session.timestamp)
                 if local_date <= start_date:
                     baseline_snap = snap  # keeps latest (ordered asc)
                 elif local_date <= end_date:
