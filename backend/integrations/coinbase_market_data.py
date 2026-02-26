@@ -6,15 +6,16 @@ primary crypto pricing provider when Coinbase credentials are configured.
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from integrations.market_data_protocol import PriceResult
 
 logger = logging.getLogger(__name__)
 
-# Maximum candles per request (Coinbase API limit)
-_MAX_CANDLES = 300
+# Maximum candles per request (Coinbase API limit).
+# ONE_DAY granularity → one candle per day → max ~300 days per request.
+_MAX_CANDLES_PER_REQUEST = 300
 
 
 class CoinbaseMarketDataProvider:
@@ -24,6 +25,9 @@ class CoinbaseMarketDataProvider:
     CoinbaseClient instance. Each ticker is mapped to a Coinbase product ID
     (e.g., ``BTC`` → ``BTC-USD``) and queried independently so a failure on
     one symbol does not block others.
+
+    Date ranges exceeding the API's 300-candle limit are automatically
+    chunked into multiple requests.
     """
 
     def __init__(self, coinbase_client):
@@ -43,6 +47,57 @@ class CoinbaseMarketDataProvider:
     def _to_product_id(ticker: str) -> str:
         """Map a bare crypto ticker to a Coinbase product ID."""
         return f"{ticker.upper()}-USD"
+
+    def _fetch_candles_chunked(
+        self, rest_client, product_id: str, start_date: date, end_date: date
+    ) -> list:
+        """Fetch candles, chunking into multiple requests if needed.
+
+        The Coinbase API returns at most 300 candles per request. For
+        date ranges longer than that, we split into consecutive windows.
+        """
+        total_days = (end_date - start_date).days + 1
+        if total_days <= _MAX_CANDLES_PER_REQUEST:
+            # Single request is sufficient
+            start_ts = str(int(
+                datetime.combine(start_date, time.min, tzinfo=timezone.utc).timestamp()
+            ))
+            end_ts = str(int(
+                datetime.combine(end_date, time(23, 59, 59), tzinfo=timezone.utc).timestamp()
+            ))
+            response = rest_client.get_candles(
+                product_id=product_id,
+                start=start_ts,
+                end=end_ts,
+                granularity="ONE_DAY",
+            )
+            return response.candles if hasattr(response, "candles") else []
+
+        # Chunk into windows of _MAX_CANDLES_PER_REQUEST days
+        all_candles: list = []
+        chunk_start = start_date
+        while chunk_start <= end_date:
+            chunk_end = min(
+                chunk_start + timedelta(days=_MAX_CANDLES_PER_REQUEST - 1),
+                end_date,
+            )
+            start_ts = str(int(
+                datetime.combine(chunk_start, time.min, tzinfo=timezone.utc).timestamp()
+            ))
+            end_ts = str(int(
+                datetime.combine(chunk_end, time(23, 59, 59), tzinfo=timezone.utc).timestamp()
+            ))
+            response = rest_client.get_candles(
+                product_id=product_id,
+                start=start_ts,
+                end=end_ts,
+                granularity="ONE_DAY",
+            )
+            candles = response.candles if hasattr(response, "candles") else []
+            all_candles.extend(candles)
+            chunk_start = chunk_end + timedelta(days=1)
+
+        return all_candles
 
     def get_price_history(
         self, symbols: list[str], start_date: date, end_date: date
@@ -68,26 +123,15 @@ class CoinbaseMarketDataProvider:
 
         rest_client = self._coinbase_client._get_client()
 
-        start_ts = str(
-            int(datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc).timestamp())
-        )
-        end_ts = str(
-            int(datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc).timestamp())
-        )
-
         result: dict[str, list[PriceResult]] = {s: [] for s in symbols}
 
         for symbol in symbols:
             product_id = self._to_product_id(symbol)
             try:
-                response = rest_client.get_candles(
-                    product_id=product_id,
-                    start=start_ts,
-                    end=end_ts,
-                    granularity="ONE_DAY",
+                candles = self._fetch_candles_chunked(
+                    rest_client, product_id, start_date, end_date,
                 )
 
-                candles = response.candles if hasattr(response, "candles") else []
                 if not candles:
                     logger.warning("Coinbase: no candle data for %s", product_id)
                     continue

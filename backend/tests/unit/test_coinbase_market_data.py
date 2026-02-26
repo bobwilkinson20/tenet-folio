@@ -1,10 +1,13 @@
 """Unit tests for CoinbaseMarketDataProvider."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from integrations.coinbase_market_data import CoinbaseMarketDataProvider
+from integrations.coinbase_market_data import (
+    CoinbaseMarketDataProvider,
+    _MAX_CANDLES_PER_REQUEST,
+)
 
 
 def _make_candle(start_ts: int, close: str) -> MagicMock:
@@ -254,3 +257,94 @@ class TestEmptyInput:
 
         assert result == {}
         mock_client._get_client.assert_not_called()
+
+
+class TestChunking:
+    """Tests for automatic chunking when date range exceeds API limit."""
+
+    def test_short_range_uses_single_request(self):
+        """A range within the limit makes exactly one API call."""
+        mock_client = MagicMock()
+        rest_client = MagicMock()
+        mock_client._get_client.return_value = rest_client
+
+        candle = _make_candle(1705276800, "42000.00")
+        rest_client.get_candles.return_value = _make_candles_response([candle])
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        provider.get_price_history(["BTC"], date(2024, 1, 15), date(2024, 1, 15))
+
+        assert rest_client.get_candles.call_count == 1
+
+    def test_long_range_chunks_into_multiple_requests(self):
+        """A range exceeding _MAX_CANDLES_PER_REQUEST splits into chunks."""
+        mock_client = MagicMock()
+        rest_client = MagicMock()
+        mock_client._get_client.return_value = rest_client
+
+        rest_client.get_candles.return_value = _make_candles_response([])
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        start = date(2024, 1, 1)
+        # 400 days > 300 limit → should produce 2 chunks
+        end = start + timedelta(days=399)
+        provider.get_price_history(["BTC"], start, end)
+
+        assert rest_client.get_candles.call_count == 2
+
+    def test_exact_boundary_uses_single_request(self):
+        """Exactly _MAX_CANDLES_PER_REQUEST days fits in one request."""
+        mock_client = MagicMock()
+        rest_client = MagicMock()
+        mock_client._get_client.return_value = rest_client
+
+        rest_client.get_candles.return_value = _make_candles_response([])
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        start = date(2024, 1, 1)
+        end = start + timedelta(days=_MAX_CANDLES_PER_REQUEST - 1)
+        provider.get_price_history(["BTC"], start, end)
+
+        assert rest_client.get_candles.call_count == 1
+
+    def test_one_over_boundary_uses_two_requests(self):
+        """One day over the limit triggers a second request."""
+        mock_client = MagicMock()
+        rest_client = MagicMock()
+        mock_client._get_client.return_value = rest_client
+
+        rest_client.get_candles.return_value = _make_candles_response([])
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        start = date(2024, 1, 1)
+        end = start + timedelta(days=_MAX_CANDLES_PER_REQUEST)
+        provider.get_price_history(["BTC"], start, end)
+
+        assert rest_client.get_candles.call_count == 2
+
+    def test_chunked_results_are_merged(self):
+        """Candles from multiple chunks are merged into one result list."""
+        mock_client = MagicMock()
+        rest_client = MagicMock()
+        mock_client._get_client.return_value = rest_client
+
+        # First chunk returns one candle, second returns another
+        call_count = 0
+
+        def side_effect(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_candles_response([_make_candle(1704067200, "42000.00")])
+            return _make_candles_response([_make_candle(1730073600, "70000.00")])
+
+        rest_client.get_candles.side_effect = side_effect
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        start = date(2024, 1, 1)
+        end = start + timedelta(days=399)  # 2 chunks
+        result = provider.get_price_history(["BTC"], start, end)
+
+        assert len(result["BTC"]) == 2
+        assert result["BTC"][0].close_price == Decimal("42000.00")
+        assert result["BTC"][1].close_price == Decimal("70000.00")
