@@ -12,7 +12,7 @@ internally, keeping the sync service free of provider-specific logic.
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from plaid import ApiException, Environment
@@ -436,7 +436,7 @@ class PlaidClient:
         Returns:
             List of ProviderActivity objects.
         """
-        end_date = datetime.now(timezone.utc).date()
+        end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
         request = InvestmentsTransactionsGetRequest(

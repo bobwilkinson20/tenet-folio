@@ -230,7 +230,8 @@ class TestPortfolioServiceSummary:
         service = PortfolioService()
         today = date.today()
         yesterday = today - timedelta(days=1)
-        # Use noon UTC so fixture's ts.date() equals local date.today()
+        # Use noon UTC so ts.date() equals date.today() for timezones
+        # up to UTC+12 (covers all standard time zones).
         now = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
 
         acct_a = _create_account(db, "AcctA", external_id="ext_a_mixed")
@@ -1088,7 +1089,8 @@ class TestGetValuationStatus:
         service = PortfolioService()
         acct = _create_account(db, "DateAcct")
         today = date.today()
-        # Use noon UTC so fixture's ts.date() equals local date.today()
+        # Use noon UTC so ts.date() equals date.today() for timezones
+        # up to UTC+12 (covers all standard time zones).
         now = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
 
         create_sync_session_with_holdings(

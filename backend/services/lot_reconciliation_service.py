@@ -419,7 +419,9 @@ def _get_sell_date(
     """Determine the sell date from activities or sync session fallback."""
     for sell in matched_sells:
         if sell.activity_date:
-            # .date() is intentional — see comment in _create_lots_for_buy
+            # .date() is intentional: midnight-UTC activity_date represents
+            # a provider calendar date; utc_to_local_date() would shift it
+            # to the previous day west of UTC.
             return sell.activity_date.date()
 
     return utc_to_local_date(sync_session.timestamp)
