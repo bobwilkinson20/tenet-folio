@@ -1,6 +1,6 @@
 """Unit tests for PortfolioService."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -228,9 +228,11 @@ class TestPortfolioServiceSummary:
         per-account values and correct as_of dates.
         """
         service = PortfolioService()
-        now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
         yesterday = today - timedelta(days=1)
+        # Use noon UTC so ts.date() equals date.today() for timezones
+        # up to UTC+12 (covers all standard time zones).
+        now = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
 
         acct_a = _create_account(db, "AcctA", external_id="ext_a_mixed")
         acct_b = _create_account(db, "AcctB", external_id="ext_b_mixed")
@@ -247,7 +249,7 @@ class TestPortfolioServiceSummary:
         create_sync_session_with_holdings(
             db,
             acct_b,
-            now - timedelta(days=1),
+            datetime.combine(yesterday, time(12, 0), tzinfo=timezone.utc),
             [("GOOG", Decimal("3000"))],
         )
 
@@ -782,7 +784,7 @@ class TestGetValuationStatus:
         service = PortfolioService()
         acct = _create_account(db, "PartialAcct")
         now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
 
         snap = SyncSession(timestamp=now, is_complete=True)
         db.add(snap)
@@ -839,7 +841,7 @@ class TestGetValuationStatus:
         service = PortfolioService()
         acct = _create_account(db, "ZeroAcct")
         now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
 
         snap = SyncSession(timestamp=now, is_complete=True)
         db.add(snap)
@@ -881,7 +883,7 @@ class TestGetValuationStatus:
         service = PortfolioService()
         acct = _create_account(db, "SentinelAcct")
         now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
 
         snap = SyncSession(timestamp=now, is_complete=True)
         db.add(snap)
@@ -980,7 +982,7 @@ class TestGetValuationStatus:
         service = PortfolioService()
         acct = _create_account(db, "CashPartialAcct")
         now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
 
         snap = SyncSession(timestamp=now, is_complete=True)
         db.add(snap)
@@ -1086,8 +1088,10 @@ class TestGetValuationStatus:
         """valuation_date is set to the latest DHV date when DHV exists."""
         service = PortfolioService()
         acct = _create_account(db, "DateAcct")
-        now = datetime.now(timezone.utc)
-        today = now.date()
+        today = date.today()
+        # Use noon UTC so ts.date() equals date.today() for timezones
+        # up to UTC+12 (covers all standard time zones).
+        now = datetime.combine(today, time(12, 0), tzinfo=timezone.utc)
 
         create_sync_session_with_holdings(
             db, acct, now, [("AAPL", Decimal("5000"))],

@@ -12,6 +12,8 @@ from decimal import Decimal
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
+from utils.date_helpers import utc_to_local_date
+
 from models import (
     Account,
     AccountSnapshot,
@@ -332,6 +334,10 @@ def _create_lots_for_buy(
         lot_qty = min(buy_qty, remaining)
 
         cost_basis = buy.price if buy.price else Decimal("0")
+        # .date() is intentional: activity_date may be a midnight-UTC
+        # representation of a local trade date (e.g., SnapTrade date-only
+        # strings, IBKR tradeDate fallback).  utc_to_local_date() would
+        # shift midnight UTC to the previous calendar day west of UTC.
         acq_date = buy.activity_date.date() if buy.activity_date else None
 
         lot = HoldingLot(
@@ -413,9 +419,12 @@ def _get_sell_date(
     """Determine the sell date from activities or sync session fallback."""
     for sell in matched_sells:
         if sell.activity_date:
+            # .date() is intentional: midnight-UTC activity_date represents
+            # a provider calendar date; utc_to_local_date() would shift it
+            # to the previous day west of UTC.
             return sell.activity_date.date()
 
-    return sync_session.timestamp.date()
+    return utc_to_local_date(sync_session.timestamp)
 
 
 def _apply_fifo_disposal(
