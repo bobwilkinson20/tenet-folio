@@ -30,7 +30,8 @@ export function ReportResultModal({
           </h2>
           <button
             onClick={onClose}
-            className="text-tf-text-tertiary hover:text-tf-text-secondary"
+            disabled={generating}
+            className={`${generating ? "text-tf-text-tertiary/30 cursor-not-allowed" : "text-tf-text-tertiary hover:text-tf-text-secondary"}`}
             aria-label="Close"
             data-testid="report-result-close"
           >

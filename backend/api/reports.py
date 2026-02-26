@@ -49,6 +49,7 @@ def generate_google_sheets_report(
     Raises:
         HTTPException:
             - 400: No portfolio data available
+            - 500: Unexpected error generating report data
             - 502: Google Sheets API error
             - 503: Google Sheets not configured
     """
