@@ -31,8 +31,6 @@ class MarketDataService:
             crypto_provider: Crypto market data provider. If None,
                             a CoinbaseMarketDataProvider is created on
                             first use when Coinbase credentials are available.
-                            Set to False (via _crypto_provider_checked) to
-                            skip creation when credentials are unavailable.
         """
         self._provider = provider
         self._crypto_provider = crypto_provider
@@ -65,8 +63,6 @@ class MarketDataService:
 
                 client = CoinbaseClient()
                 if client.is_configured():
-                    # Verify we can create the REST client
-                    client._get_client()
                     self._crypto_provider = CoinbaseMarketDataProvider(client)
                     logger.info("Coinbase market data provider initialized for crypto pricing")
                 else:

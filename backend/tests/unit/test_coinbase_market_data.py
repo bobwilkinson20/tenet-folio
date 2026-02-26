@@ -5,8 +5,8 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from integrations.coinbase_market_data import (
+    MAX_CANDLES_PER_REQUEST,
     CoinbaseMarketDataProvider,
-    _MAX_CANDLES_PER_REQUEST,
 )
 
 
@@ -226,6 +226,19 @@ class TestErrorHandling:
 
         assert result["BTC"] == []
 
+    def test_get_client_failure_returns_empty_results(self):
+        """If _get_client() raises, all symbols return empty lists."""
+        mock_client = MagicMock()
+        mock_client._get_client.side_effect = Exception("expired credentials")
+
+        provider = CoinbaseMarketDataProvider(mock_client)
+        result = provider.get_price_history(
+            ["BTC", "ETH"], date(2024, 1, 15), date(2024, 1, 15)
+        )
+
+        assert result["BTC"] == []
+        assert result["ETH"] == []
+
     def test_candle_outside_date_range_excluded(self):
         """Candles outside the requested date range are filtered out."""
         mock_client = MagicMock()
@@ -277,7 +290,7 @@ class TestChunking:
         assert rest_client.get_candles.call_count == 1
 
     def test_long_range_chunks_into_multiple_requests(self):
-        """A range exceeding _MAX_CANDLES_PER_REQUEST splits into chunks."""
+        """A range exceeding MAX_CANDLES_PER_REQUEST splits into chunks."""
         mock_client = MagicMock()
         rest_client = MagicMock()
         mock_client._get_client.return_value = rest_client
@@ -293,7 +306,7 @@ class TestChunking:
         assert rest_client.get_candles.call_count == 2
 
     def test_exact_boundary_uses_single_request(self):
-        """Exactly _MAX_CANDLES_PER_REQUEST days fits in one request."""
+        """Exactly MAX_CANDLES_PER_REQUEST days fits in one request."""
         mock_client = MagicMock()
         rest_client = MagicMock()
         mock_client._get_client.return_value = rest_client
@@ -302,7 +315,7 @@ class TestChunking:
 
         provider = CoinbaseMarketDataProvider(mock_client)
         start = date(2024, 1, 1)
-        end = start + timedelta(days=_MAX_CANDLES_PER_REQUEST - 1)
+        end = start + timedelta(days=MAX_CANDLES_PER_REQUEST - 1)
         provider.get_price_history(["BTC"], start, end)
 
         assert rest_client.get_candles.call_count == 1
@@ -317,7 +330,7 @@ class TestChunking:
 
         provider = CoinbaseMarketDataProvider(mock_client)
         start = date(2024, 1, 1)
-        end = start + timedelta(days=_MAX_CANDLES_PER_REQUEST)
+        end = start + timedelta(days=MAX_CANDLES_PER_REQUEST)
         provider.get_price_history(["BTC"], start, end)
 
         assert rest_client.get_candles.call_count == 2

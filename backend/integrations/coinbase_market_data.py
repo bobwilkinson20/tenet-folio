@@ -5,17 +5,23 @@ daily candle data for crypto symbols. This replaces CoinGecko as the
 primary crypto pricing provider when Coinbase credentials are configured.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from typing import TYPE_CHECKING
 
 from integrations.market_data_protocol import PriceResult
+
+if TYPE_CHECKING:
+    from integrations.coinbase_client import CoinbaseClient
 
 logger = logging.getLogger(__name__)
 
 # Maximum candles per request (Coinbase API limit).
 # ONE_DAY granularity → one candle per day → max ~300 days per request.
-_MAX_CANDLES_PER_REQUEST = 300
+MAX_CANDLES_PER_REQUEST = 300
 
 
 class CoinbaseMarketDataProvider:
@@ -30,7 +36,7 @@ class CoinbaseMarketDataProvider:
     chunked into multiple requests.
     """
 
-    def __init__(self, coinbase_client):
+    def __init__(self, coinbase_client: CoinbaseClient):
         """Initialize with an existing CoinbaseClient.
 
         Args:
@@ -56,29 +62,11 @@ class CoinbaseMarketDataProvider:
         The Coinbase API returns at most 300 candles per request. For
         date ranges longer than that, we split into consecutive windows.
         """
-        total_days = (end_date - start_date).days + 1
-        if total_days <= _MAX_CANDLES_PER_REQUEST:
-            # Single request is sufficient
-            start_ts = str(int(
-                datetime.combine(start_date, time.min, tzinfo=timezone.utc).timestamp()
-            ))
-            end_ts = str(int(
-                datetime.combine(end_date, time(23, 59, 59), tzinfo=timezone.utc).timestamp()
-            ))
-            response = rest_client.get_candles(
-                product_id=product_id,
-                start=start_ts,
-                end=end_ts,
-                granularity="ONE_DAY",
-            )
-            return response.candles if hasattr(response, "candles") else []
-
-        # Chunk into windows of _MAX_CANDLES_PER_REQUEST days
         all_candles: list = []
         chunk_start = start_date
         while chunk_start <= end_date:
             chunk_end = min(
-                chunk_start + timedelta(days=_MAX_CANDLES_PER_REQUEST - 1),
+                chunk_start + timedelta(days=MAX_CANDLES_PER_REQUEST - 1),
                 end_date,
             )
             start_ts = str(int(
@@ -121,9 +109,15 @@ class CoinbaseMarketDataProvider:
             len(symbols), start_date, end_date,
         )
 
-        rest_client = self._coinbase_client._get_client()
-
         result: dict[str, list[PriceResult]] = {s: [] for s in symbols}
+
+        try:
+            rest_client = self._coinbase_client._get_client()
+        except Exception:
+            logger.warning(
+                "Coinbase: failed to obtain REST client", exc_info=True,
+            )
+            return result
 
         for symbol in symbols:
             product_id = self._to_product_id(symbol)
