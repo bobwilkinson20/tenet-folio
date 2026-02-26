@@ -34,7 +34,7 @@ EQUITY_PRICE_BAND = (Decimal("0.05"), Decimal("20"))
 CRYPTO_PRICE_BAND = (Decimal("0.01"), Decimal("100"))
 
 # --- Retrospective validation constants ---
-RETRO_TRAILING_CALENDAR_DAYS = 7  # ~3 trading days with margin
+RETRO_TRAILING_CALENDAR_DAYS = 7  # ~5 trading days
 RETRO_EQUITY_THRESHOLD = Decimal("0.01")  # 1% deviation
 RETRO_CRYPTO_THRESHOLD = Decimal("0.05")  # 5% deviation
 
@@ -84,7 +84,7 @@ class ValuationResult:
     holdings_written: int = 0
     symbols_fetched: int = 0
     errors: list[str] = field(default_factory=list)
-    corrections: int = 0
+    corrections: int = 0  # TODO: surface via diagnostics API endpoint
     correction_details: list[str] = field(default_factory=list)
 
 
@@ -651,7 +651,9 @@ class PortfolioValuationService:
                 logger.warning(error_msg)
                 result.errors.append(error_msg)
 
-        # Retrospective validation: correct prior DHV rows using fresh market data
+        # Retrospective validation: correct prior DHV rows using fresh market data.
+        # Must run before _load_prior_closes so corrected prices for
+        # (start_date - 1) are visible via SQLAlchemy autoflush.
         account_ids = list(account_timelines.keys())
         self._retrospective_validate(
             db, start_date, market_data, account_ids, crypto_symbols, result,
@@ -675,7 +677,12 @@ class PortfolioValuationService:
             )
             rows.extend(day_rows)
 
-            # Update prior_closes progressively for multi-day backfills
+            # Update prior_closes progressively for multi-day backfills.
+            # Note: if a price guard rejected today's market price and fell
+            # back to a snapshot price, that snapshot price becomes tomorrow's
+            # prior_close. This is intentional — the snapshot is the best
+            # available price and will be corrected by retro validation on
+            # the next backfill run.
             for row in day_rows:
                 if row.close_price and row.close_price > 0:
                     prior_closes[(row.account_id, row.ticker)] = row.close_price
@@ -1109,7 +1116,9 @@ class PortfolioValuationService:
 
         Rows with PRICE_SOURCE_CORRECTED are permanently frozen — skipped
         to prevent re-correction loops. The original price and source are
-        not preserved separately.
+        not preserved separately; corrections are logged at INFO but not
+        persisted as an audit trail. If a correction is wrong, a re-sync
+        from the brokerage API is required to restore the original value.
         """
         if not market_data:
             return
