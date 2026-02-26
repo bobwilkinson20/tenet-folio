@@ -21,12 +21,30 @@ logger = logging.getLogger(__name__)
 # Calendar days before a carry-forward price is considered stale (~5 trading days).
 STALE_PRICE_DAYS = 7
 
+# --- Price source constants ---
+PRICE_SOURCE_MARKET = "market"
+PRICE_SOURCE_SNAPSHOT = "snapshot"
+PRICE_SOURCE_CARRY_FORWARD = "carry_forward"
+PRICE_SOURCE_CORRECTED = "corrected"
+PRICE_SOURCE_CASH = "cash"
+
+# --- Price guard thresholds ---
+# New/prior price ratio bands: prices outside these bounds are rejected.
+EQUITY_PRICE_BAND = (Decimal("0.05"), Decimal("20"))
+CRYPTO_PRICE_BAND = (Decimal("0.01"), Decimal("100"))
+
+# --- Retrospective validation constants ---
+RETRO_TRAILING_CALENDAR_DAYS = 7  # ~5 trading days
+RETRO_EQUITY_THRESHOLD = Decimal("0.01")  # 1% deviation
+RETRO_CRYPTO_THRESHOLD = Decimal("0.05")  # 5% deviation
+
 
 class PriceWithDate(NamedTuple):
-    """A close price paired with the actual trading date it came from."""
+    """A close price paired with the actual trading date and source."""
 
     price: Decimal
     price_date: date
+    source: str
 
 
 # Tickers treated as cash equivalents (always priced at $1.00).
@@ -66,6 +84,8 @@ class ValuationResult:
     holdings_written: int = 0
     symbols_fetched: int = 0
     errors: list[str] = field(default_factory=list)
+    corrections: int = 0  # TODO: surface via diagnostics API endpoint
+    correction_details: list[str] = field(default_factory=list)
 
 
 def is_cash_equivalent(ticker: str, snapshot_price: Decimal) -> bool:
@@ -93,7 +113,9 @@ def build_price_lookup(
     the most recent prior price is used. This handles weekends, holidays,
     and symbols with sparse data.  The ``price_date`` field on each entry
     records the actual trading date the close price came from, so callers
-    can detect stale carry-forwards.
+    can detect stale carry-forwards.  The ``source`` field is tagged as
+    ``PRICE_SOURCE_MARKET`` when the price is from the actual trading day,
+    or ``PRICE_SOURCE_CARRY_FORWARD`` when carried from a prior day.
     """
     lookup: dict[str, dict[date, PriceWithDate]] = {}
 
@@ -116,7 +138,12 @@ def build_price_lookup(
                 price_idx += 1
 
             if last_price is not None and last_price_date is not None:
-                price_map[current] = PriceWithDate(last_price, last_price_date)
+                source = (
+                    PRICE_SOURCE_MARKET
+                    if last_price_date == current
+                    else PRICE_SOURCE_CARRY_FORWARD
+                )
+                price_map[current] = PriceWithDate(last_price, last_price_date, source)
 
             current += timedelta(days=1)
 
@@ -157,6 +184,9 @@ class PortfolioValuationService:
         """
         rows: list[DailyHoldingValue] = []
         for h in holdings:
+            is_cash = is_cash_equivalent(h.ticker, h.snapshot_price)
+            source = PRICE_SOURCE_CASH if is_cash else PRICE_SOURCE_SNAPSHOT
+
             existing = (
                 db.query(DailyHoldingValue)
                 .filter(
@@ -173,6 +203,7 @@ class PortfolioValuationService:
                 existing.market_value = h.snapshot_value
                 existing.account_snapshot_id = h.account_snapshot_id
                 existing.price_date = valuation_date
+                existing.price_source = source
                 rows.append(existing)
             else:
                 dhv = DailyHoldingValue(
@@ -185,6 +216,7 @@ class PortfolioValuationService:
                     close_price=h.snapshot_price,
                     market_value=h.snapshot_value,
                     price_date=valuation_date,
+                    price_source=source,
                 )
                 db.add(dhv)
                 rows.append(dhv)
@@ -239,6 +271,7 @@ class PortfolioValuationService:
             existing.close_price = Decimal("0")
             existing.market_value = Decimal("0")
             existing.price_date = valuation_date
+            existing.price_source = PRICE_SOURCE_CASH
             return existing
 
         dhv = DailyHoldingValue(
@@ -251,6 +284,7 @@ class PortfolioValuationService:
             close_price=Decimal("0"),
             market_value=Decimal("0"),
             price_date=valuation_date,
+            price_source=PRICE_SOURCE_CASH,
         )
         db.add(dhv)
         return dhv
@@ -518,6 +552,7 @@ class PortfolioValuationService:
                             "age_days": age,
                             "close_price": dhv_row.close_price,
                             "market_value": dhv_row.market_value,
+                            "price_source": dhv_row.price_source,
                         })
 
             results.append({
@@ -598,12 +633,17 @@ class PortfolioValuationService:
         # Detect crypto symbols via Security asset classification
         crypto_symbols = self._detect_crypto_symbols(db)
 
+        # Extend fetch range by RETRO_TRAILING_CALENDAR_DAYS so the same
+        # market_data dict serves both forward calculation and retrospective
+        # validation, avoiding a second API call.
+        retro_fetch_start = start_date - timedelta(days=RETRO_TRAILING_CALENDAR_DAYS)
+
         # Fetch market data for all symbols
         market_data: dict[str, list] = {}
         if symbols_to_fetch:
             try:
                 market_data = self.market_data_service.get_price_history(
-                    symbols_to_fetch, start_date, end_date,
+                    symbols_to_fetch, retro_fetch_start, end_date,
                     crypto_symbols=crypto_symbols,
                 )
             except Exception as e:
@@ -611,8 +651,19 @@ class PortfolioValuationService:
                 logger.warning(error_msg)
                 result.errors.append(error_msg)
 
-        # Build price lookup with carry-forward
+        # Retrospective validation: correct prior DHV rows using fresh market data.
+        # Must run before _load_prior_closes so corrected prices for
+        # (start_date - 1) are visible via SQLAlchemy autoflush.
+        account_ids = list(account_timelines.keys())
+        self._retrospective_validate(
+            db, start_date, market_data, account_ids, crypto_symbols, result,
+        )
+
+        # Build price lookup with carry-forward (for the backfill range only)
         price_lookup = build_price_lookup(market_data, start_date, end_date)
+
+        # Pre-load prior closes for price guards
+        prior_closes = self._load_prior_closes(db, start_date, account_ids)
 
         # Walk each day and compute values
         rows: list[DailyHoldingValue] = []
@@ -621,8 +672,21 @@ class PortfolioValuationService:
             day_rows = self._calculate_day(
                 current, account_timelines, price_lookup,
                 zero_balance_security_id=zero_balance_security_id,
+                prior_closes=prior_closes,
+                crypto_symbols=crypto_symbols,
             )
             rows.extend(day_rows)
+
+            # Update prior_closes progressively for multi-day backfills.
+            # Note: if a price guard rejected today's market price and fell
+            # back to a snapshot price, that snapshot price becomes tomorrow's
+            # prior_close. This is intentional — the snapshot is the best
+            # available price and will be corrected by retro validation on
+            # the next backfill run.
+            for row in day_rows:
+                if row.close_price and row.close_price > 0:
+                    prior_closes[(row.account_id, row.ticker)] = row.close_price
+
             current += timedelta(days=1)
 
         result.dates_calculated = (end_date - start_date).days + 1
@@ -672,6 +736,7 @@ class PortfolioValuationService:
                     existing.close_price = row.close_price
                     existing.market_value = row.market_value
                     existing.price_date = row.price_date
+                    existing.price_source = row.price_source
                     if repair:
                         existing.quantity = row.quantity
                         existing.account_snapshot_id = row.account_snapshot_id
@@ -836,6 +901,8 @@ class PortfolioValuationService:
         account_timelines: dict[str, list[SnapshotWindow]],
         price_lookup: dict[str, dict[date, PriceWithDate]],
         zero_balance_security_id: Optional[str] = None,
+        prior_closes: Optional[dict[tuple[str, str], Decimal]] = None,
+        crypto_symbols: Optional[set[str]] = None,
     ) -> list[DailyHoldingValue]:
         """Compute all holding values for a single day across all accounts."""
         rows: list[DailyHoldingValue] = []
@@ -864,6 +931,7 @@ class PortfolioValuationService:
                     close_price=Decimal("0"),
                     market_value=Decimal("0"),
                     price_date=target_date,
+                    price_source=PRICE_SOURCE_CASH,
                 ))
                 continue
 
@@ -873,6 +941,27 @@ class PortfolioValuationService:
                     holding.snapshot_price,
                     snapshot_effective_date=active_window.effective_date,
                 )
+
+                # Apply price guards for non-cash sources
+                if price_info.source != PRICE_SOURCE_CASH:
+                    prior_close = (
+                        prior_closes.get((account_id, holding.ticker))
+                        if prior_closes else None
+                    )
+                    is_crypto = (
+                        crypto_symbols is not None
+                        and holding.ticker in crypto_symbols
+                    )
+                    price_info = self._validate_price(
+                        price_info,
+                        holding.ticker,
+                        target_date,
+                        holding.snapshot_price,
+                        snapshot_effective_date=active_window.effective_date,
+                        prior_close=prior_close,
+                        is_crypto=is_crypto,
+                    )
+
                 market_value = (holding.quantity * price_info.price).quantize(
                     Decimal("0.01"), rounding=ROUND_HALF_UP
                 )
@@ -887,6 +976,7 @@ class PortfolioValuationService:
                     close_price=price_info.price,
                     market_value=market_value,
                     price_date=price_info.price_date,
+                    price_source=price_info.source,
                 ))
 
         return rows
@@ -905,7 +995,7 @@ class PortfolioValuationService:
         trading date of the price used.
         """
         if is_cash_equivalent(ticker, snapshot_price):
-            return PriceWithDate(Decimal("1"), target_date)
+            return PriceWithDate(Decimal("1"), target_date, PRICE_SOURCE_CASH)
 
         symbol_prices = price_lookup.get(ticker, {})
         if target_date in symbol_prices:
@@ -913,7 +1003,219 @@ class PortfolioValuationService:
 
         # Fall back to snapshot price
         fallback_date = snapshot_effective_date if snapshot_effective_date is not None else target_date
-        return PriceWithDate(snapshot_price, fallback_date)
+        return PriceWithDate(snapshot_price, fallback_date, PRICE_SOURCE_SNAPSHOT)
+
+    @staticmethod
+    def _validate_price(
+        price_info: PriceWithDate,
+        ticker: str,
+        target_date: date,
+        snapshot_price: Decimal,
+        snapshot_effective_date: Optional[date] = None,
+        prior_close: Optional[Decimal] = None,
+        is_crypto: bool = False,
+    ) -> PriceWithDate:
+        """Validate a market price against basic sanity guards.
+
+        Guards (in order):
+        1. Reject price <= 0 → return snapshot fallback
+        2. If prior_close exists and is >0: check ratio against band
+        3. Otherwise pass through unchanged
+        """
+        price = price_info.price
+
+        # Guard 1: reject zero or negative
+        if price <= 0:
+            logger.warning(
+                "Price guard: %s on %s has non-positive price %s, "
+                "falling back to snapshot price %s",
+                ticker, target_date, price, snapshot_price,
+            )
+            fallback_date = (
+                snapshot_effective_date
+                if snapshot_effective_date is not None
+                else target_date
+            )
+            return PriceWithDate(snapshot_price, fallback_date, PRICE_SOURCE_SNAPSHOT)
+
+        # Guard 2: ratio check against prior close
+        if prior_close is not None and prior_close > 0:
+            ratio = price / prior_close
+            band = CRYPTO_PRICE_BAND if is_crypto else EQUITY_PRICE_BAND
+            low, high = band
+
+            if ratio < low or ratio > high:
+                logger.warning(
+                    "Price guard: %s on %s has suspicious ratio %.4f "
+                    "(price=%s, prior=%s, band=%s-%s), "
+                    "falling back to snapshot price %s",
+                    ticker, target_date, ratio, price, prior_close,
+                    low, high, snapshot_price,
+                )
+                fallback_date = (
+                    snapshot_effective_date
+                    if snapshot_effective_date is not None
+                    else target_date
+                )
+                return PriceWithDate(
+                    snapshot_price, fallback_date, PRICE_SOURCE_SNAPSHOT
+                )
+
+        return price_info
+
+    @staticmethod
+    def _load_prior_closes(
+        db: Session,
+        start_date: date,
+        account_ids: list[str],
+    ) -> dict[tuple[str, str], Decimal]:
+        """Load prior day closes for price guard ratio checks.
+
+        Returns a dict of (account_id, ticker) -> close_price for the day
+        before start_date.
+
+        Uses exactly 1-day lookback (not a wider window) because DHV rows
+        are built for every calendar day — including weekends and holidays —
+        so the previous calendar day always has data if the account has any
+        history.  If no row exists (e.g. first-ever backfill), the key is
+        simply absent and the ratio check in _validate_price() is skipped.
+        """
+        if not account_ids:
+            return {}
+        prior_date = start_date - timedelta(days=1)
+        rows = (
+            db.query(
+                DailyHoldingValue.account_id,
+                DailyHoldingValue.ticker,
+                DailyHoldingValue.close_price,
+            )
+            .filter(
+                DailyHoldingValue.valuation_date == prior_date,
+                DailyHoldingValue.account_id.in_(account_ids),
+            )
+            .all()
+        )
+        return {
+            (row.account_id, row.ticker): Decimal(str(row.close_price))
+            for row in rows
+        }
+
+    def _retrospective_validate(
+        self,
+        db: Session,
+        start_date: date,
+        market_data: dict[str, list],
+        account_ids: list[str],
+        crypto_symbols: Optional[set[str]],
+        result: ValuationResult,
+    ) -> None:
+        """Correct prior DHV rows using fresh market data.
+
+        Looks back RETRO_TRAILING_CALENDAR_DAYS before start_date and
+        corrects rows where the stored price differs from fresh market data.
+
+        Rows with PRICE_SOURCE_CORRECTED are permanently frozen — skipped
+        to prevent re-correction loops. The original price and source are
+        not preserved separately; corrections are logged at INFO but not
+        persisted as an audit trail. If a correction is wrong, a re-sync
+        from the brokerage API is required to restore the original value.
+        """
+        if not market_data:
+            return
+
+        retro_end = start_date - timedelta(days=1)
+        retro_start = start_date - timedelta(days=RETRO_TRAILING_CALENDAR_DAYS)
+
+        if retro_start > retro_end:
+            return
+
+        # Build retro lookup from the same market_data (already fetched
+        # with extended range)
+        retro_lookup = build_price_lookup(market_data, retro_start, retro_end)
+
+        # Query stored DHV rows in the retro window
+        stored_rows = (
+            db.query(DailyHoldingValue)
+            .filter(
+                DailyHoldingValue.valuation_date >= retro_start,
+                DailyHoldingValue.valuation_date <= retro_end,
+                DailyHoldingValue.account_id.in_(account_ids),
+            )
+            .all()
+        )
+
+        for dhv in stored_rows:
+            # Skip cash, sentinels, synthetic tickers
+            if dhv.ticker.upper() in CASH_TICKERS or dhv.ticker.startswith("_CASH:"):
+                continue
+            if dhv.ticker == ZERO_BALANCE_TICKER:
+                continue
+            if dhv.ticker.startswith(SYNTHETIC_PREFIX):
+                continue
+
+            # Look up fresh market price
+            symbol_prices = retro_lookup.get(dhv.ticker, {})
+            fresh = symbol_prices.get(dhv.valuation_date)
+            if fresh is None:
+                continue
+
+            # Only use actual market data, not carry-forward
+            if fresh.source != PRICE_SOURCE_MARKET:
+                continue
+
+            stored_source = dhv.price_source
+            stored_price = Decimal(str(dhv.close_price))
+            fresh_price = fresh.price
+
+            # Decide whether to correct
+            should_correct = False
+
+            if stored_source in (
+                PRICE_SOURCE_SNAPSHOT,
+                PRICE_SOURCE_CARRY_FORWARD,
+                None,
+            ):
+                # Always correct snapshot, carry-forward, or legacy (NULL)
+                should_correct = True
+            elif stored_source == PRICE_SOURCE_MARKET:
+                # Threshold correct: only if deviation exceeds threshold
+                if stored_price > 0:
+                    deviation = abs(fresh_price - stored_price) / stored_price
+                    is_crypto = (
+                        crypto_symbols is not None
+                        and dhv.ticker in crypto_symbols
+                    )
+                    threshold = (
+                        RETRO_CRYPTO_THRESHOLD if is_crypto
+                        else RETRO_EQUITY_THRESHOLD
+                    )
+                    if deviation > threshold:
+                        should_correct = True
+            elif stored_source == PRICE_SOURCE_CORRECTED:
+                # Permanently frozen — never re-correct
+                continue
+
+            if should_correct:
+                old_price = stored_price
+                old_mv = Decimal(str(dhv.market_value))
+                qty = Decimal(str(dhv.quantity))
+
+                dhv.close_price = fresh_price
+                dhv.price_date = fresh.price_date
+                dhv.price_source = PRICE_SOURCE_CORRECTED
+                dhv.market_value = (qty * fresh_price).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+
+                detail = (
+                    f"Corrected {dhv.ticker} on {dhv.valuation_date}: "
+                    f"price {old_price}->{fresh_price}, "
+                    f"mv {old_mv}->{dhv.market_value}, "
+                    f"source {stored_source}->{PRICE_SOURCE_CORRECTED}"
+                )
+                logger.info(detail)
+                result.corrections += 1
+                result.correction_details.append(detail)
 
     @staticmethod
     def _detect_crypto_symbols(db: Session) -> Optional[set[str]]:
