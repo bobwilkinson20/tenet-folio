@@ -46,6 +46,26 @@ SAMPLE_CRYPTO_PRICES = {
     ],
 }
 
+# Combined prices simulating Yahoo handling both equities and crypto
+SAMPLE_ALL_PRICES = {**SAMPLE_PRICES, **{
+    "BTC": [
+        PriceResult(
+            symbol="BTC",
+            price_date=date(2024, 1, 15),
+            close_price=Decimal("41999.00"),
+            source="mock",
+        ),
+    ],
+    "ETH": [
+        PriceResult(
+            symbol="ETH",
+            price_date=date(2024, 1, 15),
+            close_price=Decimal("2499.00"),
+            source="mock",
+        ),
+    ],
+}}
+
 
 class TestDelegation:
     def test_delegates_to_provider_and_returns_result(self):
@@ -219,3 +239,48 @@ class TestCryptoRouting:
 
         assert len(result["BTC"]) == 1
         assert result["BTC"][0].source == "mock_crypto"
+
+
+class TestNoCryptoProvider:
+    """Tests for behavior when no crypto provider is available."""
+
+    def test_crypto_symbols_go_to_default_when_no_crypto_provider(self):
+        """When crypto_provider is None, crypto symbols go through the default."""
+        all_provider = MockMarketDataProvider(prices=SAMPLE_ALL_PRICES)
+        service = MarketDataService(provider=all_provider, crypto_provider=None)
+        # Mark as checked so it doesn't try to create a real one
+        service._crypto_provider_checked = True
+
+        result = service.get_price_history(
+            ["BTC", "ETH"], date(2024, 1, 15), date(2024, 1, 15),
+            crypto_symbols={"BTC", "ETH"},
+        )
+
+        assert len(result["BTC"]) == 1
+        assert len(result["ETH"]) == 1
+        # Should come from the default (mock) provider, not crypto
+        assert result["BTC"][0].source == "mock"
+        assert result["ETH"][0].source == "mock"
+
+    def test_mixed_symbols_all_go_to_default_when_no_crypto_provider(self):
+        """Mixed crypto+equity all go to default when no crypto provider."""
+        all_provider = MockMarketDataProvider(prices=SAMPLE_ALL_PRICES)
+        service = MarketDataService(provider=all_provider, crypto_provider=None)
+        service._crypto_provider_checked = True
+
+        result = service.get_price_history(
+            ["AAPL", "BTC"], date(2024, 1, 15), date(2024, 1, 15),
+            crypto_symbols={"BTC"},
+        )
+
+        assert len(result["AAPL"]) == 1
+        assert len(result["BTC"]) == 1
+        assert result["AAPL"][0].source == "mock"
+        assert result["BTC"][0].source == "mock"
+
+    def test_crypto_provider_property_returns_none_when_not_injected(self):
+        """crypto_provider returns None when not injected and checked."""
+        service = MarketDataService(provider=MockMarketDataProvider())
+        service._crypto_provider_checked = True
+
+        assert service.crypto_provider is None
