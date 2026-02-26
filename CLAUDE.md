@@ -134,6 +134,10 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 | Plaid setup script | `backend/scripts/setup_plaid.py` |
 | Schwab token refresh | `backend/scripts/refresh_schwab_token.py` |
 | Schwab debug script | `backend/scripts/debug_schwab.py` |
+| Google Sheets setup | `backend/scripts/setup_google_sheets.py` |
+| Google Sheets service | `backend/services/google_sheets_service.py` |
+| Report service | `backend/services/report_service.py` |
+| Reports API | `backend/api/reports.py` |
 | Credential manager | `backend/services/credential_manager.py` |
 | Keychain migration | `backend/scripts/migrate_env_to_keychain.py` |
 | DB encryption script | `backend/scripts/encrypt_database.py` |
@@ -274,6 +278,23 @@ uv run python scripts/setup_plaid.py
 3. Use `sandbox` environment for testing, `production` for real accounts
 
 **Institution linking:** Unlike other providers, Plaid uses browser-based authentication via Plaid Link. After configuring credentials, go to Settings > Providers in the web UI to link institutions.
+
+### Google Sheets Setup
+
+To configure Google Sheets report export:
+
+```bash
+cd backend
+uv run python scripts/setup_google_sheets.py
+# Follow prompts to validate service account credentials and spreadsheet access
+# Add GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEETS_SPREADSHEET_ID to your .env file
+```
+
+**Prerequisites:**
+1. Create a service account in Google Cloud Console
+2. Enable the Google Sheets API for the project
+3. Download the service account JSON key file
+4. Share the target spreadsheet with the service account email
 
 ## Data Backfill Scripts
 

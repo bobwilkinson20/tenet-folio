@@ -10,3 +10,4 @@ export type { SyncSession } from "./sync";
 export { preferencesApi } from "./preferences";
 export { plaidApi } from "./plaid";
 export { providersApi } from "./providers";
+export { reportsApi } from "./reports";
