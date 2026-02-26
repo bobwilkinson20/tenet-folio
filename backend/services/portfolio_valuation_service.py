@@ -13,8 +13,8 @@ from models import Account, AccountSnapshot, DailyHoldingValue, Holding, SyncSes
 from models.asset_class import AssetClass
 from models.security import Security
 from services.market_data_service import MarketDataService
-from utils.date_helpers import utc_to_local_date
 from services.security_service import SecurityService
+from utils.date_helpers import utc_to_local_date
 from utils.ticker import SYNTHETIC_PREFIX, ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)

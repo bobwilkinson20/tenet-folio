@@ -1525,3 +1525,105 @@ class TestMultipleBuyActivities:
             source="inferred",
         ).all()
         assert len(inferred) == 0
+
+
+# --- TestActivityDateHandling ---
+
+
+class TestActivityDateHandling:
+    """Tests for how activity_date datetimes map to lot dates.
+
+    activity_date is stored as naive-UTC DateTime in SQLite, but some
+    providers set it to midnight UTC as a date-only representation
+    (e.g., SnapTrade date-only strings, IBKR tradeDate fallback).
+    The lot code intentionally uses .date() (not utc_to_local_date)
+    so that midnight-UTC dates preserve the provider's calendar day.
+    """
+
+    def test_midnight_utc_activity_preserves_calendar_date(
+        self, db: Session, recon_account: Account, recon_security: Security
+    ):
+        """Midnight-UTC activity_date (date-only) should keep the same date."""
+        ss1 = _make_sync_session(
+            db, datetime.combine(date(2025, 6, 27), time(12, 0), tzinfo=timezone.utc)
+        )
+        snap1 = _make_snapshot(db, recon_account, ss1, [])
+
+        # Midnight UTC — represents June 28 from a date-only provider value
+        activity = Activity(
+            account_id=recon_account.id,
+            provider_name="SnapTrade",
+            external_id="midnight_buy",
+            activity_date=datetime(2025, 6, 28, 0, 0, 0, tzinfo=timezone.utc),
+            type="buy",
+            ticker="AAPL",
+            units=Decimal("10"),
+            price=Decimal("200.00"),
+            amount=Decimal("-2000.00"),
+            currency="USD",
+        )
+        db.add(activity)
+        db.flush()
+
+        ss2 = _make_sync_session(
+            db, datetime.combine(date(2025, 6, 29), time(12, 0), tzinfo=timezone.utc)
+        )
+        snap2 = _make_snapshot(db, recon_account, ss2, [
+            {"security_id": recon_security.id, "ticker": "AAPL",
+             "quantity": Decimal("10"), "snapshot_price": Decimal("205.00")},
+        ])
+
+        LotReconciliationService.reconcile_account(
+            db, recon_account, snap1, snap2, ss2
+        )
+
+        lot = db.query(HoldingLot).filter_by(
+            account_id=recon_account.id, source="activity"
+        ).one()
+        # Must be June 28 (the provider's intended date), not June 27
+        assert lot.acquisition_date == date(2025, 6, 28)
+
+    def test_real_utc_timestamp_activity_uses_utc_date(
+        self, db: Session, recon_account: Account, recon_security: Security
+    ):
+        """A real UTC timestamp (non-midnight) uses .date() which returns UTC date."""
+        ss1 = _make_sync_session(
+            db, datetime.combine(date(2025, 6, 27), time(12, 0), tzinfo=timezone.utc)
+        )
+        snap1 = _make_snapshot(db, recon_account, ss1, [])
+
+        # 1 AM UTC on June 29 = 6 PM PT on June 28
+        # .date() returns June 29 (UTC date), not June 28 (local date).
+        # This is a known trade-off — see comment in _create_lots_for_buy.
+        activity = Activity(
+            account_id=recon_account.id,
+            provider_name="IBKR",
+            external_id="real_ts_buy",
+            activity_date=datetime(2025, 6, 29, 1, 0, 0, tzinfo=timezone.utc),
+            type="buy",
+            ticker="AAPL",
+            units=Decimal("5"),
+            price=Decimal("210.00"),
+            amount=Decimal("-1050.00"),
+            currency="USD",
+        )
+        db.add(activity)
+        db.flush()
+
+        ss2 = _make_sync_session(
+            db, datetime.combine(date(2025, 6, 30), time(12, 0), tzinfo=timezone.utc)
+        )
+        snap2 = _make_snapshot(db, recon_account, ss2, [
+            {"security_id": recon_security.id, "ticker": "AAPL",
+             "quantity": Decimal("5"), "snapshot_price": Decimal("215.00")},
+        ])
+
+        LotReconciliationService.reconcile_account(
+            db, recon_account, snap1, snap2, ss2
+        )
+
+        lot = db.query(HoldingLot).filter_by(
+            account_id=recon_account.id, source="activity"
+        ).one()
+        # .date() on a non-midnight UTC timestamp returns the UTC calendar date
+        assert lot.acquisition_date == date(2025, 6, 29)

@@ -334,7 +334,11 @@ def _create_lots_for_buy(
         lot_qty = min(buy_qty, remaining)
 
         cost_basis = buy.price if buy.price else Decimal("0")
-        acq_date = utc_to_local_date(buy.activity_date) if buy.activity_date else None
+        # .date() is intentional: activity_date may be a midnight-UTC
+        # representation of a local trade date (e.g., SnapTrade date-only
+        # strings, IBKR tradeDate fallback).  utc_to_local_date() would
+        # shift midnight UTC to the previous calendar day west of UTC.
+        acq_date = buy.activity_date.date() if buy.activity_date else None
 
         lot = HoldingLot(
             account_id=account.id,
@@ -415,7 +419,8 @@ def _get_sell_date(
     """Determine the sell date from activities or sync session fallback."""
     for sell in matched_sells:
         if sell.activity_date:
-            return utc_to_local_date(sell.activity_date)
+            # .date() is intentional — see comment in _create_lots_for_buy
+            return sell.activity_date.date()
 
     return utc_to_local_date(sync_session.timestamp)
 

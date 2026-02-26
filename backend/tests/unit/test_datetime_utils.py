@@ -5,6 +5,8 @@ import time
 from datetime import date, datetime, timezone
 from unittest.mock import patch
 
+import pytest
+
 from utils.date_helpers import utc_to_local_date
 
 
@@ -27,6 +29,12 @@ class TestUtcToLocalDate:
         utc_dt = datetime(2026, 2, 11, 1, 0, 0, tzinfo=timezone.utc)
         result = utc_to_local_date(utc_dt)
         assert isinstance(result, date)
+
+
+# time.tzset() is Unix-only; skip these on Windows
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset() requires Unix")
+class TestUtcToLocalDateTimezones:
+    """Deterministic timezone-crossing tests using TZ env var."""
 
     def test_date_boundary_cross_pacific(self):
         """1 AM UTC on Feb 11 should be Feb 10 in US/Pacific (UTC-8)."""
@@ -56,8 +64,8 @@ class TestUtcToLocalDate:
         assert result == date(2026, 2, 10)
 
     def test_midday_utc_same_day_in_far_west(self):
-        """Noon UTC should still be Feb 11 even in UTC-12 (dateline west)."""
-        utc_dt = datetime(2026, 2, 11, 12, 0, 0, tzinfo=timezone.utc)
+        """1 PM UTC should still be Feb 11 even in UTC-12 (dateline west)."""
+        utc_dt = datetime(2026, 2, 11, 13, 0, 0, tzinfo=timezone.utc)
         with _with_tz("Etc/GMT+12"):
             time.tzset()
             result = utc_to_local_date(utc_dt)
