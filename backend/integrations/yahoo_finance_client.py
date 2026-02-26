@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class YahooFinanceClient:
     """Market data provider using Yahoo Finance (yfinance library).
 
-    Handles equities, ETFs, and other traditional securities.
-    Crypto symbols are routed to a dedicated crypto provider
-    (e.g., CoinGecko) by the MarketDataService.
+    Handles equities, ETFs, and other traditional securities. Also serves
+    as the fallback for crypto tickers (e.g., ``BTC``, ``ETH``) when the
+    Coinbase market data provider is not configured.
     """
 
     @property

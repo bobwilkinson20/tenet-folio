@@ -1,4 +1,10 @@
-"""CoinGecko market data provider for cryptocurrency prices."""
+"""CoinGecko market data provider for cryptocurrency prices.
+
+.. deprecated::
+    CoinGecko is no longer wired into the MarketDataService. Crypto pricing
+    now uses Coinbase (when configured) or Yahoo Finance as a fallback.
+    This module is retained for reference but is not actively used.
+"""
 
 import logging
 import time as time_module

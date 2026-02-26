@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from integrations.market_data_protocol import PriceResult
 from services.market_data_service import MarketDataService
@@ -45,6 +46,26 @@ SAMPLE_CRYPTO_PRICES = {
         ),
     ],
 }
+
+# Combined prices simulating Yahoo handling both equities and crypto
+SAMPLE_ALL_PRICES = {**SAMPLE_PRICES, **{
+    "BTC": [
+        PriceResult(
+            symbol="BTC",
+            price_date=date(2024, 1, 15),
+            close_price=Decimal("41999.00"),
+            source="mock",
+        ),
+    ],
+    "ETH": [
+        PriceResult(
+            symbol="ETH",
+            price_date=date(2024, 1, 15),
+            close_price=Decimal("2499.00"),
+            source="mock",
+        ),
+    ],
+}}
 
 
 class TestDelegation:
@@ -219,3 +240,116 @@ class TestCryptoRouting:
 
         assert len(result["BTC"]) == 1
         assert result["BTC"][0].source == "mock_crypto"
+
+
+class TestNoCryptoProvider:
+    """Tests for behavior when no crypto provider is available."""
+
+    def test_crypto_symbols_go_to_default_when_no_crypto_provider(self):
+        """When crypto_provider is None, crypto symbols go through the default."""
+        all_provider = MockMarketDataProvider(prices=SAMPLE_ALL_PRICES)
+        service = MarketDataService(provider=all_provider, crypto_provider=None)
+        # Mark as checked so it doesn't try to create a real one
+        service._crypto_provider_checked = True
+
+        result = service.get_price_history(
+            ["BTC", "ETH"], date(2024, 1, 15), date(2024, 1, 15),
+            crypto_symbols={"BTC", "ETH"},
+        )
+
+        assert len(result["BTC"]) == 1
+        assert len(result["ETH"]) == 1
+        # Should come from the default (mock) provider, not crypto
+        assert result["BTC"][0].source == "mock"
+        assert result["ETH"][0].source == "mock"
+
+    def test_mixed_symbols_all_go_to_default_when_no_crypto_provider(self):
+        """Mixed crypto+equity all go to default when no crypto provider."""
+        all_provider = MockMarketDataProvider(prices=SAMPLE_ALL_PRICES)
+        service = MarketDataService(provider=all_provider, crypto_provider=None)
+        service._crypto_provider_checked = True
+
+        result = service.get_price_history(
+            ["AAPL", "BTC"], date(2024, 1, 15), date(2024, 1, 15),
+            crypto_symbols={"BTC"},
+        )
+
+        assert len(result["AAPL"]) == 1
+        assert len(result["BTC"]) == 1
+        assert result["AAPL"][0].source == "mock"
+        assert result["BTC"][0].source == "mock"
+
+    def test_crypto_provider_property_returns_none_when_not_injected(self):
+        """crypto_provider returns None when not injected and checked."""
+        service = MarketDataService(provider=MockMarketDataProvider())
+        service._crypto_provider_checked = True
+
+        assert service.crypto_provider is None
+
+
+class TestCryptoProviderLazyInit:
+    """Tests for the lazy initialization of the Coinbase crypto provider."""
+
+    def test_auto_initializes_when_coinbase_configured(self):
+        """crypto_provider creates a CoinbaseMarketDataProvider when configured."""
+        mock_client = MagicMock()
+        mock_client.is_configured.return_value = True
+        mock_client._get_client.return_value = MagicMock()
+
+        with patch(
+            "integrations.coinbase_client.CoinbaseClient",
+            return_value=mock_client,
+        ):
+            with patch(
+                "integrations.coinbase_market_data.CoinbaseMarketDataProvider"
+            ) as mock_provider_cls:
+                service = MarketDataService(provider=MockMarketDataProvider())
+                provider = service.crypto_provider
+
+        assert provider is not None
+        mock_provider_cls.assert_called_once_with(mock_client)
+
+    def test_does_not_retry_after_first_check(self):
+        """Second access to crypto_provider does not re-attempt creation."""
+        mock_client = MagicMock()
+        mock_client.is_configured.return_value = True
+        mock_client._get_client.return_value = MagicMock()
+
+        with patch(
+            "integrations.coinbase_client.CoinbaseClient",
+            return_value=mock_client,
+        ) as client_cls:
+            with patch(
+                "integrations.coinbase_market_data.CoinbaseMarketDataProvider"
+            ):
+                service = MarketDataService(provider=MockMarketDataProvider())
+                _ = service.crypto_provider
+                _ = service.crypto_provider
+
+        # CoinbaseClient only instantiated once despite two property accesses
+        assert client_cls.call_count == 1
+
+    def test_returns_none_when_coinbase_not_configured(self):
+        """crypto_provider returns None when Coinbase has no credentials."""
+        mock_client = MagicMock()
+        mock_client.is_configured.return_value = False
+
+        with patch(
+            "integrations.coinbase_client.CoinbaseClient",
+            return_value=mock_client,
+        ):
+            service = MarketDataService(provider=MockMarketDataProvider())
+            provider = service.crypto_provider
+
+        assert provider is None
+
+    def test_returns_none_when_client_init_fails(self):
+        """crypto_provider returns None when CoinbaseClient raises."""
+        with patch(
+            "integrations.coinbase_client.CoinbaseClient",
+            side_effect=Exception("no credentials"),
+        ):
+            service = MarketDataService(provider=MockMarketDataProvider())
+            provider = service.crypto_provider
+
+        assert provider is None

@@ -1,7 +1,6 @@
 """Market data service — thin orchestrator for market data providers."""
 
 import logging
-import os
 from datetime import date
 from typing import Optional
 
@@ -14,8 +13,9 @@ class MarketDataService:
     """Orchestrates market data fetching via pluggable providers.
 
     Supports routing crypto symbols to a dedicated crypto provider
-    (e.g., CoinGecko) while sending equities to the default provider
-    (e.g., Yahoo Finance).
+    (Coinbase) while sending equities to the default provider
+    (Yahoo Finance). When Coinbase is not configured, all symbols
+    — including crypto — are handled by Yahoo Finance.
     """
 
     def __init__(
@@ -29,11 +29,14 @@ class MarketDataService:
             provider: Default market data provider (equities). If None,
                      a YahooFinanceClient is created on first use.
             crypto_provider: Crypto market data provider. If None,
-                            a CoinGeckoClient is created on first use
-                            when crypto_symbols are passed.
+                            a CoinbaseMarketDataProvider is created on
+                            first use when Coinbase credentials are available.
         """
         self._provider = provider
         self._crypto_provider = crypto_provider
+        # Track whether we've already attempted to create a crypto provider.
+        # Avoids retrying credential loading on every call.
+        self._crypto_provider_checked = crypto_provider is not None
 
     @property
     def provider(self) -> MarketDataProvider:
@@ -45,13 +48,33 @@ class MarketDataService:
         return self._provider
 
     @property
-    def crypto_provider(self) -> MarketDataProvider:
-        """Get the crypto market data provider, creating if not provided."""
-        if self._crypto_provider is None:
-            from integrations.coingecko_client import CoinGeckoClient
+    def crypto_provider(self) -> Optional[MarketDataProvider]:
+        """Get the crypto market data provider, or None if unavailable.
 
-            api_key = os.environ.get("COINGECKO_API_KEY")
-            self._crypto_provider = CoinGeckoClient(api_key=api_key)
+        Lazily attempts to create a CoinbaseMarketDataProvider using
+        credentials from settings. Returns None when Coinbase is not
+        configured, causing all symbols to route through Yahoo Finance.
+        """
+        if not self._crypto_provider_checked:
+            self._crypto_provider_checked = True
+            try:
+                from integrations.coinbase_client import CoinbaseClient
+                from integrations.coinbase_market_data import CoinbaseMarketDataProvider
+
+                client = CoinbaseClient()
+                if client.is_configured():
+                    self._crypto_provider = CoinbaseMarketDataProvider(client)
+                    logger.info("Coinbase market data provider initialized for crypto pricing")
+                else:
+                    logger.info(
+                        "Coinbase not configured; crypto prices will use Yahoo Finance"
+                    )
+            except Exception:
+                logger.info(
+                    "Coinbase market data provider unavailable; "
+                    "crypto prices will use Yahoo Finance",
+                    exc_info=True,
+                )
         return self._crypto_provider
 
     def get_price_history(
@@ -63,9 +86,10 @@ class MarketDataService:
     ) -> dict[str, list[PriceResult]]:
         """Fetch historical prices, normalizing symbols to uppercase.
 
-        When crypto_symbols is provided, splits the request: crypto symbols
-        go to the crypto provider, everything else goes to the default
-        provider. Results are merged into a single dict.
+        When crypto_symbols is provided and a crypto provider is available,
+        splits the request: crypto symbols go to the crypto provider,
+        everything else goes to the default provider. When no crypto
+        provider is available, all symbols go through the default provider.
 
         Args:
             symbols: List of ticker symbols (case-insensitive).
@@ -82,7 +106,7 @@ class MarketDataService:
 
         normalized = [s.upper() for s in symbols]
 
-        if crypto_symbols:
+        if crypto_symbols and self.crypto_provider is not None:
             crypto_upper = {s.upper() for s in crypto_symbols}
             crypto_list = [s for s in normalized if s in crypto_upper]
             equity_list = [s for s in normalized if s not in crypto_upper]
