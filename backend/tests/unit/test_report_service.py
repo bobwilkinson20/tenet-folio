@@ -2,8 +2,10 @@
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from models import Account, AssetClass, Security
+from services.portfolio_service import CurrentHolding
 from services.report_service import generate_account_asset_class_rows
 from tests.fixtures import create_sync_session_with_holdings
 
@@ -207,3 +209,33 @@ class TestGenerateAccountAssetClassRows:
 
         rows = generate_account_asset_class_rows(db)
         assert rows[0][2] == "1234.50"
+
+    def test_none_market_value_skipped(self, db):
+        """Holdings with None market_value are silently skipped."""
+        stocks = AssetClass(name="Stocks", color="#3B82F6", target_percent=Decimal("100.00"))
+        db.add(stocks)
+        db.flush()
+
+        account = Account(
+            provider_name="Test", external_id="a1", name="Brokerage", is_active=True
+        )
+        db.add(account)
+        db.flush()
+
+        db.add(Security(ticker="AAPL", name="Apple", manual_asset_class=stocks))
+        db.add(Security(ticker="XYZ", name="No Price"))
+        db.flush()
+
+        holdings = [
+            CurrentHolding(account_id=account.id, ticker="AAPL", market_value=Decimal("1000.00")),
+            CurrentHolding(account_id=account.id, ticker="XYZ", market_value=None),
+        ]
+
+        with patch(
+            "services.report_service.PortfolioService"
+        ) as mock_ps_cls:
+            mock_ps_cls.return_value.get_current_holdings.return_value = holdings
+            rows = generate_account_asset_class_rows(db)
+
+        assert len(rows) == 1
+        assert rows[0] == ["Brokerage", "Stocks", "1000.00"]

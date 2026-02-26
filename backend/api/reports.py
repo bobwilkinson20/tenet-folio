@@ -71,8 +71,8 @@ def generate_google_sheets_report(
             status_code=503,
             detail="Google Sheets is not configured. Run setup_google_sheets.py first.",
         )
-    except GoogleSheetsError as e:
-        logger.error("Google Sheets API error: %s", e)
+    except GoogleSheetsError:
+        logger.error("Google Sheets API error", exc_info=True)
         raise HTTPException(
             status_code=502,
             detail="Failed to write report to Google Sheets.",

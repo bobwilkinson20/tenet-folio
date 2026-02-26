@@ -39,6 +39,8 @@ def generate_account_asset_class_rows(db: Session) -> list[list[str]]:
     # Aggregate market_value by (account_id, asset_class_name)
     totals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for holding in holdings:
+        if holding.market_value is None:
+            continue
         asset_class = classifications.get((holding.account_id, holding.ticker))
         class_name = asset_class.name if asset_class else "Unclassified"
         totals[(holding.account_id, class_name)] += holding.market_value
