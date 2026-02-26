@@ -31,6 +31,7 @@ export function ReportResultModal({
           <button
             onClick={onClose}
             className="text-tf-text-tertiary hover:text-tf-text-secondary"
+            aria-label="Close"
             data-testid="report-result-close"
           >
             <svg

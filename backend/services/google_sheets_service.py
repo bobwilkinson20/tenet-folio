@@ -14,6 +14,10 @@ class GoogleSheetsError(Exception):
     """Error interacting with the Google Sheets API."""
 
 
+class GoogleSheetsNotConfiguredError(GoogleSheetsError):
+    """Google Sheets credentials or spreadsheet ID not configured."""
+
+
 def get_client() -> gspread.Client:
     """Authenticate and return a gspread client.
 
@@ -25,7 +29,7 @@ def get_client() -> gspread.Client:
     """
     creds_file = settings.GOOGLE_SHEETS_CREDENTIALS_FILE
     if not creds_file:
-        raise GoogleSheetsError(
+        raise GoogleSheetsNotConfiguredError(
             "Google Sheets is not configured. Set GOOGLE_SHEETS_CREDENTIALS_FILE."
         )
 
@@ -51,11 +55,14 @@ def copy_template_and_write(rows: list[list[str]]) -> str:
     Raises:
         GoogleSheetsError: If any Sheets API operation fails.
     """
+    if not rows:
+        raise GoogleSheetsError("No data rows provided.")
+
     spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
     template_tab = settings.GOOGLE_SHEETS_TEMPLATE_TAB
 
     if not spreadsheet_id:
-        raise GoogleSheetsError(
+        raise GoogleSheetsNotConfiguredError(
             "Google Sheets is not configured. Set GOOGLE_SHEETS_SPREADSHEET_ID."
         )
 
@@ -87,16 +94,16 @@ def copy_template_and_write(rows: list[list[str]]) -> str:
     except Exception as e:
         raise GoogleSheetsError(f"Failed to duplicate template tab: {e}") from e
 
-    # Write rows to C4:E{n}
-    if rows:
-        start_row = 4
-        end_row = start_row + len(rows) - 1
-        cell_range = f"C{start_row}:E{end_row}"
+    # Template rows 1-3 are headers; data starts at row 4 in columns C:E
+    # (C=account, D=asset class, E=market value)
+    start_row = 4
+    end_row = start_row + len(rows) - 1
+    cell_range = f"C{start_row}:E{end_row}"
 
-        try:
-            new_ws.update(cell_range, rows, value_input_option="USER_ENTERED")
-        except Exception as e:
-            raise GoogleSheetsError(f"Failed to write data to sheet: {e}") from e
+    try:
+        new_ws.update(cell_range, rows, value_input_option="USER_ENTERED")
+    except Exception as e:
+        raise GoogleSheetsError(f"Failed to write data to sheet: {e}") from e
 
     logger.info(
         "Created Google Sheets tab '%s' with %d rows",

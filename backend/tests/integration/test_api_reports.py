@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from api.reports import get_report_row_generator, get_sheets_writer
 from database import get_db
 from main import app
-from services.google_sheets_service import GoogleSheetsError
+from services.google_sheets_service import GoogleSheetsError, GoogleSheetsNotConfiguredError
 
 
 def _make_client(db, generate_rows=None, write_to_sheets=None):
@@ -26,6 +26,13 @@ def _make_client(db, generate_rows=None, write_to_sheets=None):
         app.dependency_overrides[get_sheets_writer] = lambda: write_to_sheets
 
     return TestClient(app)
+
+
+def _cleanup_overrides():
+    """Remove only the overrides set by _make_client."""
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_report_row_generator, None)
+    app.dependency_overrides.pop(get_sheets_writer, None)
 
 
 def test_200_success(db):
@@ -49,7 +56,7 @@ def test_200_success(db):
         assert data["tab_name"] == "2026-02-25 14:30 UTC"
         assert data["rows_written"] == 2
     finally:
-        app.dependency_overrides.clear()
+        _cleanup_overrides()
 
 
 def test_400_no_data(db):
@@ -67,7 +74,7 @@ def test_400_no_data(db):
         assert response.status_code == 400
         assert "no portfolio data" in response.json()["detail"].lower()
     finally:
-        app.dependency_overrides.clear()
+        _cleanup_overrides()
 
 
 def test_502_sheets_api_error(db):
@@ -85,7 +92,7 @@ def test_502_sheets_api_error(db):
         assert response.status_code == 502
         assert "failed to write" in response.json()["detail"].lower()
     finally:
-        app.dependency_overrides.clear()
+        _cleanup_overrides()
 
 
 def test_503_not_configured(db):
@@ -95,7 +102,7 @@ def test_503_not_configured(db):
         return [["A", "B", "100"]]
 
     def mock_write(r):
-        raise GoogleSheetsError("Google Sheets is not configured. Set GOOGLE_SHEETS_CREDENTIALS_FILE.")
+        raise GoogleSheetsNotConfiguredError("Google Sheets is not configured. Set GOOGLE_SHEETS_CREDENTIALS_FILE.")
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
@@ -103,7 +110,7 @@ def test_503_not_configured(db):
         assert response.status_code == 503
         assert "not configured" in response.json()["detail"].lower()
     finally:
-        app.dependency_overrides.clear()
+        _cleanup_overrides()
 
 
 def test_500_generate_failure(db):
@@ -121,4 +128,4 @@ def test_500_generate_failure(db):
         assert response.status_code == 500
         assert "failed to generate" in response.json()["detail"].lower()
     finally:
-        app.dependency_overrides.clear()
+        _cleanup_overrides()

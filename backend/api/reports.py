@@ -1,14 +1,14 @@
 """Reports API endpoints."""
 
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from services.google_sheets_service import GoogleSheetsError
+from services.google_sheets_service import GoogleSheetsError, GoogleSheetsNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -20,23 +20,14 @@ class GoogleSheetsReportResponse(BaseModel):
     rows_written: int
 
 
-# Dependency injection for testing
-_report_row_generator: Optional[Callable] = None
-_sheets_writer: Optional[Callable] = None
-
-
 def get_report_row_generator() -> Callable:
-    """Get the report row generator function, allowing for test overrides."""
-    if _report_row_generator is not None:
-        return _report_row_generator
+    """Get the report row generator function."""
     from services.report_service import generate_account_asset_class_rows
     return generate_account_asset_class_rows
 
 
 def get_sheets_writer() -> Callable:
-    """Get the sheets writer function, allowing for test overrides."""
-    if _sheets_writer is not None:
-        return _sheets_writer
+    """Get the sheets writer function."""
     from services.google_sheets_service import copy_template_and_write
     return copy_template_and_write
 
@@ -75,13 +66,12 @@ def generate_google_sheets_report(
 
     try:
         tab_name = write_to_sheets(rows)
+    except GoogleSheetsNotConfiguredError:
+        raise HTTPException(
+            status_code=503,
+            detail="Google Sheets is not configured. Run setup_google_sheets.py first.",
+        )
     except GoogleSheetsError as e:
-        error_msg = str(e)
-        if "not configured" in error_msg.lower():
-            raise HTTPException(
-                status_code=503,
-                detail="Google Sheets is not configured. Run setup_google_sheets.py first.",
-            )
         logger.error("Google Sheets API error: %s", e)
         raise HTTPException(
             status_code=502,
