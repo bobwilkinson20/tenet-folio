@@ -138,6 +138,7 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 | Keychain migration | `backend/scripts/migrate_env_to_keychain.py` |
 | DB encryption script | `backend/scripts/encrypt_database.py` |
 | DB shell | `backend/scripts/db_shell.py` |
+| Date/time utilities | `backend/utils/date_helpers.py` |
 | React components | `frontend/src/components/` |
 | TypeScript types | `frontend/src/types/` |
 | API client | `frontend/src/api/client.ts` |

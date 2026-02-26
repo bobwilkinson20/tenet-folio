@@ -3,16 +3,9 @@
 import os
 import time
 from datetime import date, datetime, timezone
-from unittest.mock import patch
-
 import pytest
 
 from utils.date_helpers import utc_to_local_date
-
-
-def _with_tz(tz_name: str):
-    """Context manager that temporarily sets the system timezone."""
-    return patch.dict(os.environ, {"TZ": tz_name})
 
 
 class TestUtcToLocalDate:
@@ -36,38 +29,42 @@ class TestUtcToLocalDate:
 class TestUtcToLocalDateTimezones:
     """Deterministic timezone-crossing tests using TZ env var."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_tz(self):
+        """Restore the system timezone after each test, even on failure."""
+        original_tz = os.environ.get("TZ")
+        yield
+        if original_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original_tz
+        time.tzset()
+
+    @staticmethod
+    def _set_tz(tz_name: str):
+        os.environ["TZ"] = tz_name
+        time.tzset()
+
     def test_date_boundary_cross_pacific(self):
         """1 AM UTC on Feb 11 should be Feb 10 in US/Pacific (UTC-8)."""
         utc_dt = datetime(2026, 2, 11, 1, 0, 0, tzinfo=timezone.utc)
-        with _with_tz("US/Pacific"):
-            time.tzset()
-            result = utc_to_local_date(utc_dt)
-        time.tzset()  # restore
-        assert result == date(2026, 2, 10)
+        self._set_tz("US/Pacific")
+        assert utc_to_local_date(utc_dt) == date(2026, 2, 10)
 
     def test_no_date_boundary_cross_tokyo(self):
         """1 AM UTC on Feb 11 should be Feb 11 in Asia/Tokyo (UTC+9)."""
         utc_dt = datetime(2026, 2, 11, 1, 0, 0, tzinfo=timezone.utc)
-        with _with_tz("Asia/Tokyo"):
-            time.tzset()
-            result = utc_to_local_date(utc_dt)
-        time.tzset()  # restore
-        assert result == date(2026, 2, 11)
+        self._set_tz("Asia/Tokyo")
+        assert utc_to_local_date(utc_dt) == date(2026, 2, 11)
 
     def test_midnight_utc_previous_day_mountain(self):
         """Midnight UTC on Feb 11 should be Feb 10 in US/Mountain (UTC-7)."""
         utc_dt = datetime(2026, 2, 11, 0, 0, 0, tzinfo=timezone.utc)
-        with _with_tz("US/Mountain"):
-            time.tzset()
-            result = utc_to_local_date(utc_dt)
-        time.tzset()  # restore
-        assert result == date(2026, 2, 10)
+        self._set_tz("US/Mountain")
+        assert utc_to_local_date(utc_dt) == date(2026, 2, 10)
 
     def test_midday_utc_same_day_in_far_west(self):
         """1 PM UTC should still be Feb 11 even in UTC-12 (dateline west)."""
         utc_dt = datetime(2026, 2, 11, 13, 0, 0, tzinfo=timezone.utc)
-        with _with_tz("Etc/GMT+12"):
-            time.tzset()
-            result = utc_to_local_date(utc_dt)
-        time.tzset()  # restore
-        assert result == date(2026, 2, 11)
+        self._set_tz("Etc/GMT+12")
+        assert utc_to_local_date(utc_dt) == date(2026, 2, 11)
