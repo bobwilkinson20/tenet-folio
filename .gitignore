@@ -58,3 +58,5 @@ cdp_api_key*.json
 
 # Charles Schwab OAuth token file
 .schwab_token.json
+
+.claude/skills

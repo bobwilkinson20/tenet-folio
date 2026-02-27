@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     PLAID_SECRET: str = ""
     PLAID_ENVIRONMENT: str = "sandbox"
 
+    # Google Sheets report export (optional)
+    GOOGLE_SHEETS_CREDENTIALS_FILE: str = ""
+    GOOGLE_SHEETS_SPREADSHEET_ID: str = ""
+    GOOGLE_SHEETS_TEMPLATE_TAB: str = "Template"
+
     @field_validator("COINBASE_API_SECRET", mode="before")
     @classmethod
     def normalize_pem_newlines(cls, v: str) -> str:
