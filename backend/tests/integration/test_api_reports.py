@@ -42,7 +42,7 @@ def test_200_success(db):
         ["/", "Bonds", "500.00"],
     ]
 
-    def mock_generate_rows(db_session):
+    def mock_generate_rows(db_session, **kwargs):
         return rows
 
     def mock_write(r):
@@ -62,7 +62,7 @@ def test_200_success(db):
 def test_400_no_data(db):
     """Returns 400 when no portfolio data is available."""
 
-    def mock_generate_rows(db_session):
+    def mock_generate_rows(db_session, **kwargs):
         return []
 
     def mock_write(r):
@@ -80,7 +80,7 @@ def test_400_no_data(db):
 def test_502_sheets_api_error(db):
     """Returns 502 when Google Sheets API fails."""
 
-    def mock_generate_rows(db_session):
+    def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
 
     def mock_write(r):
@@ -98,7 +98,7 @@ def test_502_sheets_api_error(db):
 def test_503_not_configured(db):
     """Returns 503 when Google Sheets is not configured."""
 
-    def mock_generate_rows(db_session):
+    def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
 
     def mock_write(r):
@@ -116,7 +116,7 @@ def test_503_not_configured(db):
 def test_500_generate_failure(db):
     """Returns 500 when row generation fails unexpectedly."""
 
-    def mock_generate_rows(db_session):
+    def mock_generate_rows(db_session, **kwargs):
         raise RuntimeError("Unexpected DB error")
 
     def mock_write(r):
@@ -127,5 +127,45 @@ def test_500_generate_failure(db):
         response = client.post("/api/reports/google-sheets")
         assert response.status_code == 500
         assert "failed to generate" in response.json()["detail"].lower()
+    finally:
+        _cleanup_overrides()
+
+
+def test_allocation_only_passed_to_generator(db):
+    """allocation_only query param is forwarded to the row generator."""
+    received_kwargs = {}
+
+    def mock_generate_rows(db_session, **kwargs):
+        received_kwargs.update(kwargs)
+        return [["A", "Stocks", "100"]]
+
+    def mock_write(r):
+        return "tab"
+
+    client = _make_client(db, mock_generate_rows, mock_write)
+    try:
+        response = client.post("/api/reports/google-sheets?allocation_only=true")
+        assert response.status_code == 200
+        assert received_kwargs.get("allocation_only") is True
+    finally:
+        _cleanup_overrides()
+
+
+def test_allocation_only_defaults_false(db):
+    """allocation_only defaults to False when not provided."""
+    received_kwargs = {}
+
+    def mock_generate_rows(db_session, **kwargs):
+        received_kwargs.update(kwargs)
+        return [["A", "Stocks", "100"]]
+
+    def mock_write(r):
+        return "tab"
+
+    client = _make_client(db, mock_generate_rows, mock_write)
+    try:
+        response = client.post("/api/reports/google-sheets")
+        assert response.status_code == 200
+        assert received_kwargs.get("allocation_only") is False
     finally:
         _cleanup_overrides()

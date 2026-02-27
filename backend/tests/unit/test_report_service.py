@@ -239,3 +239,44 @@ class TestGenerateAccountAssetClassRows:
 
         assert len(rows) == 1
         assert rows[0] == ["Brokerage", "Stocks", "1000.00"]
+
+    def test_zero_balance_sentinel_excluded(self, db):
+        """_ZERO_BALANCE sentinel holdings are excluded from report rows."""
+        stocks = AssetClass(name="Stocks", color="#3B82F6", target_percent=Decimal("100.00"))
+        db.add(stocks)
+        db.flush()
+
+        account = Account(
+            provider_name="Test", external_id="a1", name="Brokerage", is_active=True
+        )
+        db.add(account)
+        db.flush()
+
+        db.add(Security(ticker="AAPL", name="Apple", manual_asset_class=stocks))
+        db.flush()
+
+        holdings = [
+            CurrentHolding(account_id=account.id, ticker="AAPL", market_value=Decimal("1000.00")),
+            CurrentHolding(account_id=account.id, ticker="_ZERO_BALANCE", market_value=Decimal("0")),
+        ]
+
+        with patch(
+            "services.report_service.PortfolioService"
+        ) as mock_ps_cls:
+            mock_ps_cls.return_value.get_current_holdings.return_value = holdings
+            rows = generate_account_asset_class_rows(db)
+
+        assert len(rows) == 1
+        assert rows[0] == ["Brokerage", "Stocks", "1000.00"]
+
+    def test_allocation_only_forwarded(self, db):
+        """allocation_only=True is forwarded to PortfolioService."""
+        with patch(
+            "services.report_service.PortfolioService"
+        ) as mock_ps_cls:
+            mock_ps_cls.return_value.get_current_holdings.return_value = []
+            generate_account_asset_class_rows(db, allocation_only=True)
+
+            mock_ps_cls.return_value.get_current_holdings.assert_called_once_with(
+                db, allocation_only=True
+            )

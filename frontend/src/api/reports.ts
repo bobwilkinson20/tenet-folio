@@ -5,7 +5,13 @@ export interface GoogleSheetsReportResponse {
   rows_written: number;
 }
 
+export interface GenerateGoogleSheetsParams {
+  allocation_only?: boolean;
+}
+
 export const reportsApi = {
-  generateGoogleSheets: () =>
-    apiClient.post<GoogleSheetsReportResponse>("/reports/google-sheets"),
+  generateGoogleSheets: (params?: GenerateGoogleSheetsParams) =>
+    apiClient.post<GoogleSheetsReportResponse>("/reports/google-sheets", null, {
+      params,
+    }),
 };

@@ -9,11 +9,14 @@ from sqlalchemy.orm import Session
 from models import Account
 from services.classification_service import ClassificationService
 from services.portfolio_service import PortfolioService
+from utils.ticker import ZERO_BALANCE_TICKER
 
 logger = logging.getLogger(__name__)
 
 
-def generate_account_asset_class_rows(db: Session) -> list[list[str]]:
+def generate_account_asset_class_rows(
+    db: Session, allocation_only: bool = False
+) -> list[list[str]]:
     """Generate report rows grouped by (account, asset class).
 
     Each row is ``[account_name, asset_class_name, market_value]``.
@@ -22,11 +25,12 @@ def generate_account_asset_class_rows(db: Session) -> list[list[str]]:
 
     Args:
         db: Database session.
+        allocation_only: If True, include only allocation-flagged accounts.
 
     Returns:
         List of 3-element string lists ready for Google Sheets.
     """
-    holdings = PortfolioService().get_current_holdings(db)
+    holdings = PortfolioService().get_current_holdings(db, allocation_only=allocation_only)
 
     if not holdings:
         return []
@@ -39,7 +43,7 @@ def generate_account_asset_class_rows(db: Session) -> list[list[str]]:
     # Aggregate market_value by (account_id, asset_class_name)
     totals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for holding in holdings:
-        if holding.market_value is None:
+        if holding.market_value is None or holding.ticker == ZERO_BALANCE_TICKER:
             continue
         asset_class = classifications.get((holding.account_id, holding.ticker))
         class_name = asset_class.name if asset_class else "Unclassified"

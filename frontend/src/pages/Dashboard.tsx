@@ -98,7 +98,7 @@ export function DashboardPage() {
     setShowReportResult(true);
 
     try {
-      const response = await reportsApi.generateGoogleSheets();
+      const response = await reportsApi.generateGoogleSheets({ allocation_only: allocationOnly });
       setReportResult(response.data);
     } catch (err) {
       const axiosErr = err as {

@@ -3,7 +3,7 @@
 import logging
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ def get_sheets_writer() -> Callable:
 
 @router.post("/google-sheets", response_model=GoogleSheetsReportResponse)
 def generate_google_sheets_report(
+    allocation_only: bool = Query(False),
     db: Session = Depends(get_db),
     generate_rows: Callable = Depends(get_report_row_generator),
     write_to_sheets: Callable = Depends(get_sheets_writer),
@@ -42,6 +43,9 @@ def generate_google_sheets_report(
 
     Creates a new tab from the template with timestamped name and populates
     it with account/asset-class market value rows.
+
+    Args:
+        allocation_only: If True, include only allocation-flagged accounts.
 
     Returns:
         GoogleSheetsReportResponse with tab name and row count.
@@ -54,7 +58,7 @@ def generate_google_sheets_report(
             - 503: Google Sheets not configured
     """
     try:
-        rows = generate_rows(db)
+        rows = generate_rows(db, allocation_only=allocation_only)
     except Exception:
         logger.error("Failed to generate report rows", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate report data.")
