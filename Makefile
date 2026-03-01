@@ -18,10 +18,10 @@ FRONTEND_PORT ?= 5173
 
 dev: ## Run backend and frontend dev servers concurrently
 	@trap 'kill 0' EXIT; \
-	FRONTEND_URL=http://localhost:$(FRONTEND_PORT) \
-	  cd backend && uv run python -m uvicorn main:app --reload --port $(BACKEND_PORT) & \
-	VITE_API_URL=http://localhost:$(BACKEND_PORT)/api \
-	  cd frontend && npx vite --port $(FRONTEND_PORT) & \
+	cd backend && FRONTEND_URL=http://localhost:$(FRONTEND_PORT) \
+	  uv run python -m uvicorn main:app --reload --port $(BACKEND_PORT) & \
+	cd frontend && VITE_API_URL=http://localhost:$(BACKEND_PORT)/api \
+	  npx vite --port $(FRONTEND_PORT) & \
 	wait
 
 dev-paper: ## Run dev servers with TENET_PROFILE=paper (ports 8001/5174)
