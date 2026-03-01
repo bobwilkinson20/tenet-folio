@@ -49,21 +49,12 @@ class TestGetActiveProfile:
             with pytest.raises(ValueError, match="Invalid TENET_PROFILE"):
                 get_active_profile()
 
+    def test_raises_on_trailing_hyphen(self):
+        with patch.dict("os.environ", {"TENET_PROFILE": "paper-"}):
+            with pytest.raises(ValueError, match="Invalid TENET_PROFILE"):
+                get_active_profile()
+
     def test_raises_on_special_chars(self):
         with patch.dict("os.environ", {"TENET_PROFILE": "test@home"}):
             with pytest.raises(ValueError, match="Invalid TENET_PROFILE"):
                 get_active_profile()
-
-
-class TestServiceNameConstruction:
-    """Test SERVICE_NAME is built correctly from a profile value."""
-
-    def test_with_profile(self):
-        profile = "paper"
-        result = f"tenet-folio:{profile}" if profile else "tenet-folio"
-        assert result == "tenet-folio:paper"
-
-    def test_without_profile(self):
-        profile = None
-        result = f"tenet-folio:{profile}" if profile else "tenet-folio"
-        assert result == "tenet-folio"

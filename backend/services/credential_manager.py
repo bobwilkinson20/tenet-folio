@@ -12,7 +12,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_PROFILE_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
+_PROFILE_PATTERN = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$")
 
 
 def get_active_profile() -> str | None:

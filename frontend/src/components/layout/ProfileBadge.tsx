@@ -8,7 +8,9 @@ export function ProfileBadge() {
     apiClient
       .get<{ profile: string | null }>("/config/profile")
       .then((res) => setProfile(res.data.profile))
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("ProfileBadge: could not fetch profile", err);
+      });
   }, []);
 
   if (!profile) return null;
