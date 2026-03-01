@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
@@ -63,9 +63,7 @@ class Settings(BaseSettings):
         )
 
     # Database
-    DATABASE_URL: str = (
-        f"sqlite:///./portfolio-{ACTIVE_PROFILE}.db" if ACTIVE_PROFILE else "sqlite:///./portfolio.db"
-    )
+    DATABASE_URL: str = "sqlite:///./portfolio.db"
     SQLCIPHER_KEY: str = ""
 
     # SnapTrade credentials (optional - for SnapTrade integration)
@@ -123,6 +121,19 @@ class Settings(BaseSettings):
         if v.upper() not in valid:
             raise ValueError(f"LOG_LEVEL must be one of {valid}, got {v!r}")
         return v.upper()
+
+    @model_validator(mode="after")
+    def apply_profile_database_url(self) -> "Settings":
+        """Rewrite the default DATABASE_URL to include the active profile name.
+
+        When ``TENET_PROFILE`` is set and the DATABASE_URL is the standard
+        default (``sqlite:///./portfolio.db``), replace the filename with
+        ``portfolio-{profile}.db``.  Custom DATABASE_URL values are left
+        untouched so explicit overrides are always respected.
+        """
+        if ACTIVE_PROFILE and self.DATABASE_URL == "sqlite:///./portfolio.db":
+            self.DATABASE_URL = f"sqlite:///./portfolio-{ACTIVE_PROFILE}.db"
+        return self
 
     # App settings
     ENVIRONMENT: str = "development"

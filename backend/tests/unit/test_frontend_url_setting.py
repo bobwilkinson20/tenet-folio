@@ -1,4 +1,4 @@
-"""Tests for FRONTEND_URL setting."""
+"""Tests for FRONTEND_URL and profile-aware DATABASE_URL settings."""
 
 import os
 from unittest.mock import patch
@@ -38,3 +38,50 @@ class TestFrontendUrlSetting:
         ):
             s = Settings(_env_file=None)
             assert s.FRONTEND_URL == "http://localhost:5174"
+
+
+class TestProfileDatabaseUrl:
+    """Test that the model_validator rewrites DATABASE_URL for active profiles."""
+
+    def test_no_profile_keeps_default(self):
+        with (
+            patch.dict(os.environ, _clean_env(), clear=True),
+            patch("config.get_credential", return_value=None),
+            patch("config.ACTIVE_PROFILE", None),
+        ):
+            s = Settings(_env_file=None)
+            assert s.DATABASE_URL == "sqlite:///./portfolio.db"
+
+    def test_profile_rewrites_default(self):
+        with (
+            patch.dict(os.environ, _clean_env(), clear=True),
+            patch("config.get_credential", return_value=None),
+            patch("config.ACTIVE_PROFILE", "paper"),
+        ):
+            s = Settings(_env_file=None)
+            assert s.DATABASE_URL == "sqlite:///./portfolio-paper.db"
+
+    def test_profile_rewrites_env_var_default(self):
+        """Even when .env sets DATABASE_URL to the standard default, the
+        profile suffix is applied."""
+        env = _clean_env()
+        env["DATABASE_URL"] = "sqlite:///./portfolio.db"
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("config.get_credential", return_value=None),
+            patch("config.ACTIVE_PROFILE", "paper"),
+        ):
+            s = Settings(_env_file=None)
+            assert s.DATABASE_URL == "sqlite:///./portfolio-paper.db"
+
+    def test_profile_leaves_custom_url_alone(self):
+        """A user-specified non-default DATABASE_URL is never rewritten."""
+        env = _clean_env()
+        env["DATABASE_URL"] = "sqlite:///./my-custom.db"
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch("config.get_credential", return_value=None),
+            patch("config.ACTIVE_PROFILE", "paper"),
+        ):
+            s = Settings(_env_file=None)
+            assert s.DATABASE_URL == "sqlite:///./my-custom.db"
