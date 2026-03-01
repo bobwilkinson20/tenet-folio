@@ -38,7 +38,7 @@ make dev-test     # TENET_PROFILE=test,  ports 8002/5175
 - **UI:** A badge in the header shows the active profile name
 - **Setup scripts:** Keychain prompts include the profile label
 
-Profile names must match `[a-zA-Z0-9][a-zA-Z0-9-]*`. The app fails fast on invalid names.
+Profile names must match `[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?` (no leading or trailing hyphens). The app fails fast on invalid names.
 
 Without `TENET_PROFILE`, everything behaves as before (service name `tenet-folio`, database `portfolio.db`, default ports, no badge).
 

@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 from services.credential_manager import ACTIVE_PROFILE, CREDENTIAL_KEYS, get_credential
 
+_DEFAULT_DATABASE_URL = "sqlite:///./portfolio.db"
+
 
 class KeychainSettingsSource(PydanticBaseSettingsSource):
     """Load credential fields from macOS Keychain via ``keyring``.
@@ -63,7 +65,7 @@ class Settings(BaseSettings):
         )
 
     # Database
-    DATABASE_URL: str = "sqlite:///./portfolio.db"
+    DATABASE_URL: str = _DEFAULT_DATABASE_URL
     SQLCIPHER_KEY: str = ""
 
     # SnapTrade credentials (optional - for SnapTrade integration)
@@ -131,7 +133,7 @@ class Settings(BaseSettings):
         ``portfolio-{profile}.db``.  Custom DATABASE_URL values are left
         untouched so explicit overrides are always respected.
         """
-        if ACTIVE_PROFILE and self.DATABASE_URL == "sqlite:///./portfolio.db":
+        if ACTIVE_PROFILE and self.DATABASE_URL == _DEFAULT_DATABASE_URL:
             self.DATABASE_URL = f"sqlite:///./portfolio-{ACTIVE_PROFILE}.db"
         return self
 
