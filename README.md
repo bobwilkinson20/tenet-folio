@@ -86,6 +86,44 @@ Configure one or more providers. Each has a one-time setup script that validates
 
 All setup commands run from `backend/`. See [CLAUDE.md](CLAUDE.md) for detailed setup instructions per provider.
 
+## Profiles
+
+You can run multiple isolated instances of TenetFolio side-by-side using the `TENET_PROFILE` environment variable. Each profile gets its own database, Keychain entries, and server ports — useful for separating production data from a paper trading sandbox.
+
+```bash
+# Run alongside the default instance — no port conflicts
+make dev-paper    # profile "paper" on ports 8001/5174
+make dev-test     # profile "test"  on ports 8002/5175
+```
+
+What gets namespaced per profile:
+
+| Resource | Default | With `TENET_PROFILE=paper` |
+|----------|---------|---------------------------|
+| Database file | `portfolio.db` | `portfolio-paper.db` |
+| Keychain service | `tenet-folio` | `tenet-folio:paper` |
+| Backend port | 8000 | 8001 |
+| Frontend port | 5173 | 5174 |
+
+After creating a new profile, apply migrations to its database:
+
+```bash
+TENET_PROFILE=paper make migrate
+```
+
+Setup scripts are also profile-aware — credentials are stored under the profile's Keychain namespace:
+
+```bash
+cd backend
+TENET_PROFILE=paper uv run python scripts/setup_plaid.py
+```
+
+You can also use custom port assignments with any profile:
+
+```bash
+TENET_PROFILE=demo BACKEND_PORT=9000 FRONTEND_PORT=9001 make dev
+```
+
 ## Development
 
 ### Makefile Commands
@@ -96,6 +134,8 @@ A root-level Makefile wraps common workflows so you can run everything from the 
 |---------|-------------|
 | `make setup` | Install all dependencies and apply database migrations |
 | `make dev` | Run backend and frontend dev servers concurrently |
+| `make dev-paper` | Run with `TENET_PROFILE=paper` on ports 8001/5174 |
+| `make dev-test` | Run with `TENET_PROFILE=test` on ports 8002/5175 |
 | `make test` | Run all backend and frontend tests |
 | `make lint` | Run all linters and type checks |
 | `make format` | Auto-format backend code |

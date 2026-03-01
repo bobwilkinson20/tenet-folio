@@ -21,6 +21,27 @@ Personal portfolio manager that syncs brokerage accounts via multiple data aggre
 4. **Sync Throttle:** Holdings sync limited to once per 24h unless forced.
 5. **Classification Waterfall:** Account override → Security override → Unclassified.
 
+## Profiles
+
+Set `TENET_PROFILE` to run isolated instances with separate Keychain entries, database files, and ports:
+
+```bash
+make dev-paper    # TENET_PROFILE=paper, ports 8001/5174
+make dev-test     # TENET_PROFILE=test,  ports 8002/5175
+```
+
+- **Ports:** `dev-paper` runs on 8001/5174, `dev-test` on 8002/5175 — no collision with the default `make dev` (8000/5173). Override with `BACKEND_PORT` / `FRONTEND_PORT`.
+- **Keychain:** Service name becomes `tenet-folio:<profile>` (e.g., `tenet-folio:paper`)
+- **Database:** Defaults to `portfolio-<profile>.db` (e.g., `portfolio-paper.db`) — override with `DATABASE_URL`
+- **CORS:** Backend reads `FRONTEND_URL` (default `http://localhost:5173`) to set the allowed origin. The Makefile targets set this automatically.
+- **API client:** Frontend reads `VITE_API_URL` (default `http://localhost:8000/api`). The Makefile targets set this automatically.
+- **UI:** A badge in the header shows the active profile name
+- **Setup scripts:** Keychain prompts include the profile label
+
+Profile names must match `[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?` (no leading or trailing hyphens). The app fails fast on invalid names.
+
+Without `TENET_PROFILE`, everything behaves as before (service name `tenet-folio`, database `portfolio.db`, default ports, no badge).
+
 ## Common Commands
 
 A root-level `Makefile` provides shortcuts for the most common operations:
@@ -33,6 +54,8 @@ make lint                               # Ruff check + ESLint + type-check
 make format                             # Auto-format backend code
 make migrate                            # Apply pending Alembic migrations
 make migration msg="description"        # Create a new migration
+make dev-paper                          # Profile=paper on ports 8001/5174
+make dev-test                           # Profile=test on ports 8002/5175
 ```
 
 ### Raw Commands (what the Makefile targets run)
@@ -138,6 +161,7 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 | Google Sheets service | `backend/services/google_sheets_service.py` |
 | Report service | `backend/services/report_service.py` |
 | Reports API | `backend/api/reports.py` |
+| Config API (profile) | `backend/api/config.py` |
 | Credential manager | `backend/services/credential_manager.py` |
 | Keychain migration | `backend/scripts/migrate_env_to_keychain.py` |
 | DB encryption script | `backend/scripts/encrypt_database.py` |
@@ -447,6 +471,7 @@ All enhancements should follow this branch/PR workflow:
 - **React 19:** Some patterns differ from React 18
 - **Credential priority:** Settings loads credentials in this order: init args > macOS Keychain > env vars > `.env` file. Keychain values override `.env` for the 14 credential keys (see `CREDENTIAL_KEYS` in `credential_manager.py`). Non-secret settings (DATABASE_URL, ENVIRONMENT, etc.) skip keychain entirely.
 - **SQLCipher key loss:** The `SQLCIPHER_KEY` in macOS Keychain is required to read an encrypted database. If the key is lost, the database is unrecoverable. The key is auto-generated on first run (fresh install) and stored in keychain. Back up the key if needed via `security find-generic-password -s tenet-folio -a SQLCIPHER_KEY -w`.
+- **Per-profile DB migrations:** Each profile has its own database file. After creating a new profile, run `TENET_PROFILE=<name> make migrate` to apply migrations to the new database before starting the app.
 
 ## Documentation
 

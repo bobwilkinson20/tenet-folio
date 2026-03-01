@@ -7,10 +7,37 @@ rest of the app works even if keyring is not installed.
 """
 
 import logging
+import os
+import re
 
 logger = logging.getLogger(__name__)
 
-SERVICE_NAME = "tenet-folio"
+_PROFILE_PATTERN = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$")
+
+
+def get_active_profile() -> str | None:
+    """Read and validate the ``TENET_PROFILE`` environment variable.
+
+    Returns:
+        The profile name, or ``None`` when unset / empty.
+
+    Raises:
+        ValueError: If the value contains invalid characters.
+    """
+    value = os.environ.get("TENET_PROFILE", "").strip()
+    if not value:
+        return None
+    if not _PROFILE_PATTERN.match(value):
+        raise ValueError(
+            f"Invalid TENET_PROFILE {value!r} — "
+            "must start with alphanumeric and contain only [a-zA-Z0-9-]"
+        )
+    return value
+
+
+ACTIVE_PROFILE: str | None = get_active_profile()
+
+SERVICE_NAME = f"tenet-folio:{ACTIVE_PROFILE}" if ACTIVE_PROFILE else "tenet-folio"
 
 CREDENTIAL_KEYS: frozenset[str] = frozenset(
     {

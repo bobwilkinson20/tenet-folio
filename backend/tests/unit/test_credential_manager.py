@@ -191,3 +191,38 @@ class TestCredentialKeys:
 
     def test_is_frozen(self):
         assert isinstance(CREDENTIAL_KEYS, frozenset)
+
+
+# ---------------------------------------------------------------------------
+# Profile-aware SERVICE_NAME
+# ---------------------------------------------------------------------------
+
+
+class TestProfileServiceName:
+    def test_default_service_name_no_profile(self):
+        """Without TENET_PROFILE, SERVICE_NAME should be 'tenet-folio'."""
+        # SERVICE_NAME is computed at import time. Since tests run without
+        # TENET_PROFILE set, the default should be the base name.
+        assert SERVICE_NAME == "tenet-folio"
+
+    def test_get_credential_uses_service_name(self):
+        """get_credential passes SERVICE_NAME to keyring.get_password."""
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = "val"
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            get_credential("PLAID_CLIENT_ID")
+        mock_keyring.get_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID")
+
+    def test_set_credential_uses_service_name(self):
+        """set_credential passes SERVICE_NAME to keyring.set_password."""
+        mock_keyring = MagicMock()
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            set_credential("PLAID_CLIENT_ID", "cid123")
+        mock_keyring.set_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID", "cid123")
+
+    def test_delete_credential_uses_service_name(self):
+        """delete_credential passes SERVICE_NAME to keyring.delete_password."""
+        mock_keyring = MagicMock()
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            delete_credential("PLAID_CLIENT_ID")
+        mock_keyring.delete_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID")

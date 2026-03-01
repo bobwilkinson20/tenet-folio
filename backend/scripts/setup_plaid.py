@@ -32,15 +32,16 @@ from plaid.model.products import Products
 def _offer_keychain_store(credentials: dict[str, str]) -> None:
     """Prompt the user to store credentials in macOS Keychain."""
     try:
-        from services.credential_manager import set_credential
+        from services.credential_manager import ACTIVE_PROFILE, set_credential
     except ImportError:
         return
 
-    answer = input("\nStore these credentials in macOS Keychain? [Y/n] ").strip().lower()
+    profile_label = f" (profile: {ACTIVE_PROFILE})" if ACTIVE_PROFILE else ""
+    answer = input(f"\nStore in Keychain{profile_label}? [Y/n] ").strip().lower()
     if answer in ("", "y", "yes"):
         for key, value in credentials.items():
             if set_credential(key, value):
-                print(f"  Stored {key} in keychain")
+                print(f"  Stored {key} in keychain{profile_label}")
             else:
                 print(f"  Failed to store {key}")
     else:
