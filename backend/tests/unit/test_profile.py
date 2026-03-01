@@ -22,6 +22,10 @@ class TestGetActiveProfile:
         with patch.dict("os.environ", {"TENET_PROFILE": "   "}):
             assert get_active_profile() is None
 
+    def test_returns_single_char_profile(self):
+        with patch.dict("os.environ", {"TENET_PROFILE": "a"}):
+            assert get_active_profile() == "a"
+
     def test_returns_valid_profile(self):
         with patch.dict("os.environ", {"TENET_PROFILE": "paper"}):
             assert get_active_profile() == "paper"

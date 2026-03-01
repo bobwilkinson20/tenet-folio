@@ -62,8 +62,8 @@ class TestProfileDatabaseUrl:
             assert s.DATABASE_URL == "sqlite:///./portfolio-paper.db"
 
     def test_profile_rewrites_env_var_default(self):
-        """Even when .env sets DATABASE_URL to the standard default, the
-        profile suffix is applied."""
+        """Even when DATABASE_URL is explicitly set to the standard default
+        value, the profile suffix is still applied."""
         env = _clean_env()
         env["DATABASE_URL"] = "sqlite:///./portfolio.db"
         with (
