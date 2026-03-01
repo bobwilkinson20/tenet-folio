@@ -430,7 +430,10 @@ All enhancements should follow this branch/PR workflow:
 
    Including `Closes #123` (or `Fixes #123`) in the PR body will automatically close the issue when the PR is merged.
 
-6. **Merge** the PR into `main` after review.
+6. **Merge** the PR into `main` using **"Squash and merge"** (not a regular merge commit). This keeps `main` history linear with one commit per PR. When using `gh pr merge`, pass the `--squash` flag:
+   ```bash
+   gh pr merge --squash
+   ```
 
 ## Changelog
 
