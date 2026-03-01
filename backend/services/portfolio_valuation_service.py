@@ -50,7 +50,7 @@ class PriceWithDate(NamedTuple):
 
 # Tickers treated as cash equivalents (always priced at $1.00).
 CASH_TICKERS = frozenset({
-    "USD", "CASH", "CAD",
+    "$", "$$", "USD", "CASH", "CAD",
     # Common money market / sweep funds
     "SPAXX", "FDRXX", "SWVXX", "VMFXX", "FZFXX",
 })
