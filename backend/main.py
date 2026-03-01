@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import accounts, asset_classes, config, dashboard, lots, market_data, plaid, portfolio, preferences, providers, reports, securities, sync
+from config import settings
 from database import get_session_local
 from logging_config import setup_logging
 from models import UserPreference
@@ -108,7 +109,7 @@ app = FastAPI(
 # CORS configuration for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

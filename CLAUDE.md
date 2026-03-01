@@ -23,21 +23,24 @@ Personal portfolio manager that syncs brokerage accounts via multiple data aggre
 
 ## Profiles
 
-Set `TENET_PROFILE` to run isolated instances with separate Keychain entries and database files:
+Set `TENET_PROFILE` to run isolated instances with separate Keychain entries, database files, and ports:
 
 ```bash
-TENET_PROFILE=paper make dev       # or: make dev-paper
-TENET_PROFILE=test make dev        # or: make dev-test
+make dev-paper    # TENET_PROFILE=paper, ports 8001/5174
+make dev-test     # TENET_PROFILE=test,  ports 8002/5175
 ```
 
+- **Ports:** `dev-paper` runs on 8001/5174, `dev-test` on 8002/5175 — no collision with the default `make dev` (8000/5173). Override with `BACKEND_PORT` / `FRONTEND_PORT`.
 - **Keychain:** Service name becomes `tenet-folio:<profile>` (e.g., `tenet-folio:paper`)
 - **Database:** Defaults to `portfolio-<profile>.db` (e.g., `portfolio-paper.db`) — override with `DATABASE_URL`
+- **CORS:** Backend reads `FRONTEND_URL` (default `http://localhost:5173`) to set the allowed origin. The Makefile targets set this automatically.
+- **API client:** Frontend reads `VITE_API_URL` (default `http://localhost:8000/api`). The Makefile targets set this automatically.
 - **UI:** A badge in the header shows the active profile name
 - **Setup scripts:** Keychain prompts include the profile label
 
 Profile names must match `[a-zA-Z0-9][a-zA-Z0-9-]*`. The app fails fast on invalid names.
 
-Without `TENET_PROFILE`, everything behaves as before (service name `tenet-folio`, database `portfolio.db`, no badge).
+Without `TENET_PROFILE`, everything behaves as before (service name `tenet-folio`, database `portfolio.db`, default ports, no badge).
 
 ## Common Commands
 
@@ -51,8 +54,8 @@ make lint                               # Ruff check + ESLint + type-check
 make format                             # Auto-format backend code
 make migrate                            # Apply pending Alembic migrations
 make migration msg="description"        # Create a new migration
-make dev-paper                          # Run dev with TENET_PROFILE=paper
-make dev-test                           # Run dev with TENET_PROFILE=test
+make dev-paper                          # Profile=paper on ports 8001/5174
+make dev-test                           # Profile=test on ports 8002/5175
 ```
 
 ### Raw Commands (what the Makefile targets run)

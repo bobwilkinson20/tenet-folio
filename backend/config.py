@@ -128,6 +128,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
+    FRONTEND_URL: str = "http://localhost:5173"
 
 
 settings = Settings()
