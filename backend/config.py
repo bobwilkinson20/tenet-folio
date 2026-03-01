@@ -6,7 +6,7 @@ from pydantic import field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
-from services.credential_manager import CREDENTIAL_KEYS, get_credential
+from services.credential_manager import ACTIVE_PROFILE, CREDENTIAL_KEYS, get_credential
 
 
 class KeychainSettingsSource(PydanticBaseSettingsSource):
@@ -63,7 +63,9 @@ class Settings(BaseSettings):
         )
 
     # Database
-    DATABASE_URL: str = "sqlite:///./portfolio.db"
+    DATABASE_URL: str = (
+        f"sqlite:///./portfolio-{ACTIVE_PROFILE}.db" if ACTIVE_PROFILE else "sqlite:///./portfolio.db"
+    )
     SQLCIPHER_KEY: str = ""
 
     # SnapTrade credentials (optional - for SnapTrade integration)

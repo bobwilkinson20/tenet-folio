@@ -8,11 +8,12 @@ from datetime import date, timedelta
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import accounts, asset_classes, dashboard, lots, market_data, plaid, portfolio, preferences, providers, reports, securities, sync
+from api import accounts, asset_classes, config, dashboard, lots, market_data, plaid, portfolio, preferences, providers, reports, securities, sync
 from database import get_session_local
 from logging_config import setup_logging
 from models import UserPreference
 from services.asset_type_service import AssetTypeService
+from services.credential_manager import ACTIVE_PROFILE
 from services.portfolio_valuation_service import PortfolioValuationService
 
 DHV_VERIFIED_KEY = "system.dhv_verified_through"
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run portfolio valuation backfill on startup."""
+    logger.info("Active profile: %s", ACTIVE_PROFILE or "default")
     SessionLocal = get_session_local()
     db = SessionLocal()
     try:
@@ -125,9 +127,13 @@ app.include_router(preferences.router)
 app.include_router(plaid.router)
 app.include_router(providers.router)
 app.include_router(reports.router)
+app.include_router(config.router)
 
 
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
-    return {"status": "ok"}
+    response = {"status": "ok"}
+    if ACTIVE_PROFILE:
+        response["profile"] = ACTIVE_PROFILE
+    return response

@@ -14,6 +14,10 @@ vi.mock("@/hooks/useTheme", () => ({
   }),
 }));
 
+vi.mock("@/components/layout/ProfileBadge", () => ({
+  ProfileBadge: () => <span data-testid="profile-badge">mock-badge</span>,
+}));
+
 vi.mock("@/components/layout/ThemeToggle", () => ({
   ThemeToggle: () => <button aria-label="Switch to light theme">theme-toggle</button>,
 }));
@@ -103,5 +107,11 @@ describe("Layout", () => {
     renderLayout();
 
     expect(screen.getByRole("button", { name: "Switch to light theme" })).toBeInTheDocument();
+  });
+
+  it("renders ProfileBadge", () => {
+    renderLayout();
+
+    expect(screen.getByTestId("profile-badge")).toBeInTheDocument();
   });
 });

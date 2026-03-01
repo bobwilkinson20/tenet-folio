@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "@/hooks/useTheme";
+import { ProfileBadge } from "./ProfileBadge";
 import { ThemeToggle } from "./ThemeToggle";
 
 export interface LayoutProps {
@@ -44,6 +45,7 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
+              <ProfileBadge />
               <div className="ml-2 border-l border-tf-border-default pl-4">
                 <ThemeToggle />
               </div>
