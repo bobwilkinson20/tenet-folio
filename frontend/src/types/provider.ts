@@ -4,4 +4,17 @@ export interface ProviderStatus {
   is_enabled: boolean;
   account_count: number;
   last_sync_time: string | null;
+  supports_setup: boolean;
+}
+
+export interface ProviderSetupField {
+  key: string;
+  label: string;
+  help_text: string;
+  input_type: "text" | "textarea" | "password";
+}
+
+export interface ProviderSetupResponse {
+  provider: string;
+  message: string;
 }

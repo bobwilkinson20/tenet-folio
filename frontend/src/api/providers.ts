@@ -1,5 +1,9 @@
 import { apiClient } from "./client";
-import type { ProviderStatus } from "../types/provider";
+import type {
+  ProviderSetupField,
+  ProviderSetupResponse,
+  ProviderStatus,
+} from "../types/provider";
 
 export const providersApi = {
   list: () => apiClient.get<ProviderStatus[]>("/providers"),
@@ -7,4 +11,12 @@ export const providersApi = {
     apiClient.put<ProviderStatus>(`/providers/${name}`, {
       is_enabled: isEnabled,
     }),
+  getSetupInfo: (name: string) =>
+    apiClient.get<ProviderSetupField[]>(`/providers/${name}/setup-info`),
+  setup: (name: string, credentials: Record<string, string>) =>
+    apiClient.post<ProviderSetupResponse>(`/providers/${name}/setup`, {
+      credentials,
+    }),
+  removeCredentials: (name: string) =>
+    apiClient.delete<ProviderSetupResponse>(`/providers/${name}/credentials`),
 };
