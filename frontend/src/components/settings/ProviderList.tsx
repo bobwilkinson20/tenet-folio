@@ -31,16 +31,16 @@ export function ProviderList() {
   const [setupProvider, setSetupProvider] = useState<string | null>(null);
   const [removingProvider, setRemovingProvider] = useState<string | null>(null);
 
-  const fetchProviders = async () => {
+  const fetchProviders = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const response = await providersApi.list();
       setProviders(response.data);
       setError(null);
     } catch {
       setError("Failed to load providers");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -202,7 +202,7 @@ export function ProviderList() {
           providerName={setupProvider}
           isOpen={true}
           onClose={() => setSetupProvider(null)}
-          onSuccess={() => fetchProviders()}
+          onSuccess={() => fetchProviders(false)}
         />
       )}
     </div>

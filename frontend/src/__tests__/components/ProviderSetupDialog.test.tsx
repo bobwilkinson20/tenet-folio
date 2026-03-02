@@ -188,4 +188,161 @@ describe("ProviderSetupDialog", () => {
       expect(screen.getByText("Not found")).toBeInTheDocument();
     });
   });
+
+  it("renders IBKR form with two fields", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "flex_token",
+          label: "Flex Token",
+          help_text: "Your Flex Web Service token",
+          input_type: "password" as const,
+        },
+        {
+          key: "flex_query_id",
+          label: "Flex Query ID",
+          help_text: "The numeric ID of your Flex Query",
+          input_type: "text" as const,
+        },
+      ],
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="IBKR"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Flex Token")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Flex Query ID")).toBeInTheDocument();
+    expect(screen.getByText("Configure IBKR")).toBeInTheDocument();
+  });
+
+  it("shows success with warnings for IBKR setup", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "flex_token",
+          label: "Flex Token",
+          help_text: "Token",
+          input_type: "password" as const,
+        },
+        {
+          key: "flex_query_id",
+          label: "Flex Query ID",
+          help_text: "Query ID",
+          input_type: "text" as const,
+        },
+      ],
+    } as never);
+
+    mockedSetup.mockResolvedValue({
+      data: {
+        provider: "IBKR",
+        message: "IBKR configured successfully.",
+        warnings: [
+          "Trades section is missing recommended columns: buySell, netCash.",
+        ],
+      },
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="IBKR"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Flex Token")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Flex Token"), {
+      target: { value: "tok123" },
+    });
+    fireEvent.change(screen.getByLabelText("Flex Query ID"), {
+      target: { value: "456" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("IBKR configured successfully."),
+      ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByText(/missing recommended columns.*buySell.*netCash/),
+    ).toBeInTheDocument();
+
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows success without warnings for clean IBKR setup", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "flex_token",
+          label: "Flex Token",
+          help_text: "Token",
+          input_type: "password" as const,
+        },
+        {
+          key: "flex_query_id",
+          label: "Flex Query ID",
+          help_text: "Query ID",
+          input_type: "text" as const,
+        },
+      ],
+    } as never);
+
+    mockedSetup.mockResolvedValue({
+      data: {
+        provider: "IBKR",
+        message: "IBKR configured successfully.",
+        warnings: [],
+      },
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="IBKR"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Flex Token")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Flex Token"), {
+      target: { value: "tok123" },
+    });
+    fireEvent.change(screen.getByLabelText("Flex Query ID"), {
+      target: { value: "456" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("IBKR configured successfully."),
+      ).toBeInTheDocument();
+    });
+
+    // No warning list should be rendered
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
 });

@@ -17,4 +17,5 @@ export interface ProviderSetupField {
 export interface ProviderSetupResponse {
   provider: string;
   message: string;
+  warnings?: string[];
 }

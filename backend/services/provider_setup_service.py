@@ -6,13 +6,36 @@ and stores validated credentials in the macOS Keychain.
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Callable, Literal, TypedDict
 
 import httpx
+from config import settings
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential, set_credential
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SetupResult:
+    """Result of a provider setup validation."""
+
+    message: str
+    warnings: list[str] = field(default_factory=list)
+
+
+def _sync_setting(store_key: str, value: str) -> None:
+    """Update the in-memory settings singleton after a credential change.
+
+    The ``settings`` object is loaded once at startup.  When credentials
+    are added or removed via the setup service the keychain is updated but
+    the singleton still holds the old value.  This helper patches the
+    singleton so the provider registry sees the change immediately without
+    requiring an app restart.
+    """
+    if hasattr(settings, store_key):
+        setattr(settings, store_key, value)
 
 
 class ProviderFieldDef(TypedDict):
@@ -41,6 +64,29 @@ PROVIDER_CREDENTIAL_MAP: dict[str, list[ProviderFieldDef]] = {
             ),
             "input_type": "password",
             "store_key": "SIMPLEFIN_ACCESS_URL",
+        },
+    ],
+    "IBKR": [
+        {
+            "key": "flex_token",
+            "label": "Flex Token",
+            "help_text": (
+                "Your Flex Web Service token from IBKR Client Portal. "
+                "Go to Settings > Flex Web Service Configuration to generate one."
+            ),
+            "input_type": "password",
+            "store_key": "IBKR_FLEX_TOKEN",
+        },
+        {
+            "key": "flex_query_id",
+            "label": "Flex Query ID",
+            "help_text": (
+                "The numeric ID of your Flex Query. "
+                "Find it under Reports > Flex Queries > Custom Flex Queries. "
+                "The query must include Open Positions, Cash Report, and Trades sections."
+            ),
+            "input_type": "text",
+            "store_key": "IBKR_FLEX_QUERY_ID",
         },
     ],
 }
@@ -73,7 +119,7 @@ def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
     ]
 
 
-def validate_and_store(provider_name: str, credentials: dict[str, str]) -> str:
+def validate_and_store(provider_name: str, credentials: dict[str, str]) -> SetupResult:
     """Validate credentials and store them in Keychain.
 
     For SimpleFIN, this exchanges the setup token for an access URL
@@ -84,7 +130,7 @@ def validate_and_store(provider_name: str, credentials: dict[str, str]) -> str:
         credentials: Dict of field key → value from the setup form.
 
     Returns:
-        Success message string.
+        SetupResult with success message and optional warnings.
 
     Raises:
         ValueError: If the provider is unknown or credentials are invalid.
@@ -118,9 +164,10 @@ def remove_credentials(provider_name: str) -> str:
         raise ValueError(f"No setup configuration for provider: {provider_name}")
 
     removed = []
-    for field in fields:
-        key = field["store_key"]
+    for field_def in fields:
+        key = field_def["store_key"]
         if delete_credential(key):
+            _sync_setting(key, "")
             logger.info("Removed credential %s for %s", key, provider_name)
             removed.append(key)
         else:
@@ -133,7 +180,7 @@ def remove_credentials(provider_name: str) -> str:
 
 def _validate_simplefin(
     credentials: dict[str, str], fields: list[ProviderFieldDef]
-) -> str:
+) -> SetupResult:
     """Validate SimpleFIN setup token and store access URL.
 
     Exchanges the one-time setup token for a permanent access URL
@@ -189,14 +236,115 @@ def _validate_simplefin(
             "Ensure keyring is installed and accessible."
         )
 
+    _sync_setting(store_key, access_url)
     logger.info("SimpleFIN credentials validated and stored")
-    return "SimpleFIN configured successfully. Access URL stored in Keychain."
+    return SetupResult(
+        message="SimpleFIN configured successfully. Access URL stored in Keychain."
+    )
+
+
+def _validate_ibkr(
+    credentials: dict[str, str], fields: list[ProviderFieldDef]
+) -> SetupResult:
+    """Validate IBKR Flex credentials by downloading a test report.
+
+    Downloads a Flex report to verify the token and query ID are valid,
+    then checks that required sections and trade columns are present.
+    """
+    flex_token = credentials.get("flex_token", "").strip()
+    if not flex_token:
+        raise ValueError("Flex Token is required")
+
+    flex_query_id = credentials.get("flex_query_id", "").strip()
+    if not flex_query_id:
+        raise ValueError("Flex Query ID is required")
+
+    # Import ibflex and setup_ibkr validation helpers
+    try:
+        from ibflex import client as ibflex_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "ibflex library is not installed. "
+            "Install it with: uv add ibflex"
+        ) from exc
+
+    from scripts.setup_ibkr import (
+        REQUIRED_SECTION_COLUMNS,
+        validate_query_sections,
+        validate_trade_columns,
+    )
+
+    # Download a test Flex report to validate credentials
+    try:
+        data = ibflex_client.download(flex_token, flex_query_id)
+    except Exception as exc:
+        logger.warning("IBKR Flex credential validation failed: %s", exc)
+        raise ValueError(
+            "Failed to validate IBKR credentials. "
+            "Check that your Flex Token and Query ID are correct. "
+            "Common issues: expired token, invalid query ID, or IP restriction."
+        ) from exc
+
+    # Check required sections
+    missing_sections = validate_query_sections(data)
+    if missing_sections:
+        details = []
+        for section in missing_sections:
+            cols = REQUIRED_SECTION_COLUMNS.get(section)
+            if cols:
+                details.append(f"{section} (columns: {', '.join(cols)})")
+            else:
+                details.append(section)
+        section_detail = "; ".join(details)
+        raise ValueError(
+            f"Flex Query is missing required sections: {section_detail}. "
+            "Edit your query in IBKR Client Portal to add them."
+        )
+
+    # Check trade columns
+    missing_required, missing_recommended = validate_trade_columns(data)
+    if missing_required:
+        col_list = ", ".join(missing_required)
+        raise ValueError(
+            f"Flex Query Trades section is missing required columns: {col_list}. "
+            "Edit your query in IBKR Client Portal to add them."
+        )
+
+    # Collect warnings for missing recommended columns (non-blocking)
+    warnings: list[str] = []
+    if missing_recommended:
+        col_list = ", ".join(missing_recommended)
+        warnings.append(
+            f"Trades section is missing recommended columns: {col_list}. "
+            "Activities will sync but with incomplete data."
+        )
+
+    # Store both credentials
+    for field_def in fields:
+        key = field_def["key"]
+        store_key = field_def["store_key"]
+        value = credentials.get(key, "").strip()
+        if not set_credential(store_key, value):
+            raise RuntimeError(
+                f"Failed to store {field_def['label']} in Keychain. "
+                "Ensure keyring is installed and accessible."
+            )
+        _sync_setting(store_key, value)
+
+    logger.info("IBKR Flex credentials validated and stored")
+    return SetupResult(
+        message="IBKR configured successfully. Credentials stored in Keychain.",
+        warnings=warnings,
+    )
 
 
 # Dispatch table for provider-specific validators.
-# Each validator receives (credentials, fields) and returns a success message.
-_VALIDATORS: dict[str, Callable[[dict[str, str], list[ProviderFieldDef]], str]] = {
+# Each validator receives (credentials, fields) and returns a SetupResult.
+_VALIDATORS: dict[
+    str, Callable[[dict[str, str], list[ProviderFieldDef]], SetupResult]
+] = {
     "SimpleFIN": _validate_simplefin,
+    "IBKR": _validate_ibkr,
 }
 
 if set(_VALIDATORS) != set(PROVIDER_CREDENTIAL_MAP):

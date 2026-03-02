@@ -36,6 +36,7 @@ class ProviderSetupResponse(BaseModel):
 
     provider: str
     message: str
+    warnings: list[str] = []
 
 
 class ProviderCredentialInfo(BaseModel):

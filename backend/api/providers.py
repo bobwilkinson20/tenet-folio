@@ -85,14 +85,16 @@ def setup_provider(name: str, body: ProviderSetupRequest):
         )
 
     try:
-        message = provider_setup_service.validate_and_store(name, body.credentials)
+        result = provider_setup_service.validate_and_store(name, body.credentials)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     logger.info("Provider %s configured via in-app setup", name)
-    return ProviderSetupResponse(provider=name, message=message)
+    return ProviderSetupResponse(
+        provider=name, message=result.message, warnings=result.warnings
+    )
 
 
 @router.delete("/{name}/credentials", response_model=ProviderSetupResponse)
