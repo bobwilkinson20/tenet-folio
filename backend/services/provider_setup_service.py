@@ -8,6 +8,7 @@ and stores validated credentials in the macOS Keychain.
 import logging
 from typing import Callable, Literal, TypedDict
 
+import httpx
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential, set_credential
 
@@ -153,11 +154,6 @@ def _validate_simplefin(
         ) from exc
 
     try:
-        import httpx
-    except ImportError:
-        httpx = None  # type: ignore[assignment]
-
-    try:
         access_url = SimpleFINLibClient.get_access_url(setup_token)
     except (ValueError, UnicodeDecodeError) as exc:
         logger.warning("SimpleFIN token exchange failed (bad token format): %s", exc)
@@ -165,13 +161,14 @@ def _validate_simplefin(
             "Failed to exchange setup token: invalid format. "
             "The token should be a base64 string from the SimpleFIN Bridge."
         ) from exc
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        logger.warning("SimpleFIN token exchange failed (network): %s", exc)
+        raise ValueError(
+            f"Failed to exchange setup token: could not reach SimpleFIN ({exc}). "
+            "Check your network connection and try again."
+        ) from exc
     except Exception as exc:
         logger.warning("SimpleFIN token exchange failed: %s", exc)
-        if httpx and isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
-            raise ValueError(
-                f"Failed to exchange setup token: could not reach SimpleFIN ({exc}). "
-                "Check your network connection and try again."
-            ) from exc
         raise ValueError(
             "Failed to exchange setup token. "
             "The token may have already been used (tokens are single-use) "
@@ -202,7 +199,8 @@ _VALIDATORS: dict[str, Callable[[dict[str, str], list[ProviderFieldDef]], str]] 
     "SimpleFIN": _validate_simplefin,
 }
 
-assert set(_VALIDATORS) == set(PROVIDER_CREDENTIAL_MAP), (
-    f"PROVIDER_CREDENTIAL_MAP and _VALIDATORS are out of sync: "
-    f"{set(PROVIDER_CREDENTIAL_MAP) - set(_VALIDATORS)} missing validators"
-)
+if set(_VALIDATORS) != set(PROVIDER_CREDENTIAL_MAP):
+    raise ValueError(
+        f"PROVIDER_CREDENTIAL_MAP and _VALIDATORS are out of sync: "
+        f"{set(PROVIDER_CREDENTIAL_MAP) - set(_VALIDATORS)} missing validators"
+    )
