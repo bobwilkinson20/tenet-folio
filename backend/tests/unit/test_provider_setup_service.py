@@ -54,11 +54,29 @@ class TestValidateAndStore:
 
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_invalid_token(self, mock_get_url):
-        """Invalid token raises ValueError with helpful message."""
+        """Invalid/used token raises ValueError with 'already been used' hint."""
         mock_get_url.side_effect = Exception("Invalid setup token")
 
-        with pytest.raises(ValueError, match="Failed to exchange setup token"):
+        with pytest.raises(ValueError, match="may have already been used"):
             validate_and_store("SimpleFIN", {"setup_token": "bad-token"})
+
+    @patch("simplefin.SimpleFINClient.get_access_url")
+    def test_simplefin_network_error(self, mock_get_url):
+        """Network error raises ValueError with connectivity hint."""
+        import httpx
+
+        mock_get_url.side_effect = httpx.ConnectError("Connection refused")
+
+        with pytest.raises(ValueError, match="could not reach SimpleFIN"):
+            validate_and_store("SimpleFIN", {"setup_token": "dGVzdA=="})
+
+    @patch("simplefin.SimpleFINClient.get_access_url")
+    def test_simplefin_bad_token_format(self, mock_get_url):
+        """Malformed base64 token raises ValueError with format hint."""
+        mock_get_url.side_effect = UnicodeDecodeError("utf-8", b"", 0, 1, "bad")
+
+        with pytest.raises(ValueError, match="invalid format"):
+            validate_and_store("SimpleFIN", {"setup_token": "not-base64!"})
 
     def test_simplefin_empty_token(self):
         """Empty setup token raises ValueError."""

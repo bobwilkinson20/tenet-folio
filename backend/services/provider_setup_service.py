@@ -153,16 +153,34 @@ def _validate_simplefin(
         ) from exc
 
     try:
+        import httpx
+    except ImportError:
+        httpx = None  # type: ignore[assignment]
+
+    try:
         access_url = SimpleFINLibClient.get_access_url(setup_token)
+    except (ValueError, UnicodeDecodeError) as exc:
+        logger.warning("SimpleFIN token exchange failed (bad token format): %s", exc)
+        raise ValueError(
+            "Failed to exchange setup token: invalid format. "
+            "The token should be a base64 string from the SimpleFIN Bridge."
+        ) from exc
     except Exception as exc:
         logger.warning("SimpleFIN token exchange failed: %s", exc)
+        if httpx and isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
+            raise ValueError(
+                f"Failed to exchange setup token: could not reach SimpleFIN ({exc}). "
+                "Check your network connection and try again."
+            ) from exc
         raise ValueError(
             "Failed to exchange setup token. "
             "The token may have already been used (tokens are single-use) "
             "or is invalid."
         ) from exc
 
-    # Look up store_key from the field definition rather than hardcoding index
+    # Look up store_key from PROVIDER_CREDENTIAL_MAP via fields param.
+    # Uses next() rather than fields[0] so this pattern generalizes to
+    # multi-field providers where validators need a specific field by key.
     store_key_field = next((f for f in fields if f["key"] == "setup_token"), None)
     if store_key_field is None:
         raise ValueError("No field definition found for setup_token")
@@ -183,3 +201,8 @@ def _validate_simplefin(
 _VALIDATORS: dict[str, Callable[[dict[str, str], list[ProviderFieldDef]], str]] = {
     "SimpleFIN": _validate_simplefin,
 }
+
+assert set(_VALIDATORS) == set(PROVIDER_CREDENTIAL_MAP), (
+    f"PROVIDER_CREDENTIAL_MAP and _VALIDATORS are out of sync: "
+    f"{set(PROVIDER_CREDENTIAL_MAP) - set(_VALIDATORS)} missing validators"
+)
