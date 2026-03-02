@@ -65,6 +65,14 @@ class TestListProviders:
         assert by_name["SimpleFIN"].account_count == 1  # inactive excluded
         assert by_name["IBKR"].account_count == 0
 
+    def test_supports_setup(self, db):
+        """Providers in PROVIDER_CREDENTIAL_MAP have supports_setup=True."""
+        result = ProviderService.list_providers(db)
+        by_name = {p.name: p for p in result}
+        assert by_name["SimpleFIN"].supports_setup is True
+        assert by_name["SnapTrade"].supports_setup is False
+        assert by_name["IBKR"].supports_setup is False
+
     def test_last_sync_time(self, db):
         """Shows last sync time from most recent account sync."""
         from datetime import datetime, timezone

@@ -14,6 +14,7 @@ class ProviderStatusResponse(BaseModel):
     is_enabled: bool
     account_count: int
     last_sync_time: Optional[datetime] = None
+    supports_setup: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -11,6 +11,7 @@ from integrations.provider_registry import ALL_PROVIDER_NAMES, ProviderRegistry 
 from models import Account
 from models.provider_setting import ProviderSetting
 from schemas.provider import ProviderStatusResponse
+from services.provider_setup_service import PROVIDER_CREDENTIAL_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ class ProviderService:
                     is_enabled=is_enabled,
                     account_count=count_map.get(name, 0),
                     last_sync_time=sync_map.get(name),
+                    supports_setup=name in PROVIDER_CREDENTIAL_MAP,
                 )
             )
 

@@ -18,9 +18,6 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   Plaid: "Bank and investment aggregator via Plaid Link",
 };
 
-/** Providers that support in-app setup via the setup dialog. */
-const PROVIDERS_WITH_SETUP = new Set(["SimpleFIN"]);
-
 function formatSyncTime(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleString();
@@ -161,7 +158,7 @@ export function ProviderList() {
                   </span>
                 )}
               </div>
-              {PROVIDERS_WITH_SETUP.has(provider.name) && (
+              {provider.supports_setup && (
                 <div className="mt-2 flex gap-2">
                   {provider.has_credentials ? (
                     <>

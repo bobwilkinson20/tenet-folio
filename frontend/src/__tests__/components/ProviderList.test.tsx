@@ -9,6 +9,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 2,
     last_sync_time: "2026-01-15T10:00:00Z",
+    supports_setup: false,
   },
   {
     name: "SimpleFIN",
@@ -16,6 +17,7 @@ const mockProviders = [
     is_enabled: false,
     account_count: 1,
     last_sync_time: null,
+    supports_setup: true,
   },
   {
     name: "IBKR",
@@ -23,6 +25,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 0,
     last_sync_time: null,
+    supports_setup: false,
   },
   {
     name: "Coinbase",
@@ -30,6 +33,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 1,
     last_sync_time: "2026-01-10T09:00:00Z",
+    supports_setup: false,
   },
   {
     name: "Schwab",
@@ -37,6 +41,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 0,
     last_sync_time: null,
+    supports_setup: false,
   },
 ];
 

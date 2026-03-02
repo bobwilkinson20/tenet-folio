@@ -6,7 +6,7 @@ and stores validated credentials in the macOS Keychain.
 """
 
 import logging
-from typing import Callable
+from typing import Callable, TypedDict
 
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential, set_credential
@@ -14,10 +14,20 @@ from services.credential_manager import delete_credential, set_credential
 logger = logging.getLogger(__name__)
 
 
+class ProviderFieldDef(TypedDict):
+    """Type-safe definition for a provider credential field."""
+
+    key: str
+    label: str
+    help_text: str
+    input_type: str
+    store_key: str
+
+
 # Maps provider name → list of credential field definitions.
 # Each entry describes one input field in the setup form.
 # "store_key" is the credential key stored in Keychain (may differ from "key").
-PROVIDER_CREDENTIAL_MAP: dict[str, list[dict]] = {
+PROVIDER_CREDENTIAL_MAP: dict[str, list[ProviderFieldDef]] = {
     "SimpleFIN": [
         {
             "key": "setup_token",
@@ -115,7 +125,7 @@ def remove_credentials(provider_name: str) -> str:
 
 
 def _validate_simplefin(
-    credentials: dict[str, str], fields: list[dict]
+    credentials: dict[str, str], fields: list[ProviderFieldDef]
 ) -> str:
     """Validate SimpleFIN setup token and store access URL.
 
@@ -163,6 +173,6 @@ def _validate_simplefin(
 
 # Dispatch table for provider-specific validators.
 # Each validator receives (credentials, fields) and returns a success message.
-_VALIDATORS: dict[str, Callable[[dict[str, str], list[dict]], str]] = {
+_VALIDATORS: dict[str, Callable[[dict[str, str], list[ProviderFieldDef]], str]] = {
     "SimpleFIN": _validate_simplefin,
 }
