@@ -64,11 +64,13 @@ def get_setup_info(name: str):
     """Return field definitions for the provider's setup form."""
     if name not in ALL_PROVIDER_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+    if name not in PROVIDER_CREDENTIAL_MAP:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No setup configuration for provider: {name}",
+        )
 
-    try:
-        return provider_setup_service.get_setup_fields(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return provider_setup_service.get_setup_fields(name)
 
 
 @router.post("/{name}/setup", response_model=ProviderSetupResponse)
@@ -98,11 +100,12 @@ def remove_credentials(name: str):
     """Remove all credentials for a provider from Keychain."""
     if name not in ALL_PROVIDER_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+    if name not in PROVIDER_CREDENTIAL_MAP:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No setup configuration for provider: {name}",
+        )
 
-    try:
-        message = provider_setup_service.remove_credentials(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
+    message = provider_setup_service.remove_credentials(name)
     logger.info("Provider %s credentials removed via in-app setup", name)
     return ProviderSetupResponse(provider=name, message=message)

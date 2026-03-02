@@ -64,8 +64,8 @@ def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
         ProviderCredentialInfo(
             key=f["key"],
             label=f["label"],
-            help_text=f.get("help_text", ""),
-            input_type=f.get("input_type", "text"),
+            help_text=f["help_text"],
+            input_type=f["input_type"],
         )
         for f in fields
     ]
@@ -115,13 +115,18 @@ def remove_credentials(provider_name: str) -> str:
     if fields is None:
         raise ValueError(f"No credential keys for provider: {provider_name}")
 
-    for key in [f["store_key"] for f in fields]:
+    removed = []
+    for field in fields:
+        key = field["store_key"]
         if delete_credential(key):
             logger.info("Removed credential %s for %s", key, provider_name)
+            removed.append(key)
         else:
             logger.warning("Credential %s not found in Keychain for %s", key, provider_name)
 
-    return f"{provider_name} credentials removed"
+    if removed:
+        return f"{provider_name} credentials removed"
+    return f"No credentials were configured for {provider_name}"
 
 
 def _validate_simplefin(
@@ -149,8 +154,9 @@ def _validate_simplefin(
     try:
         access_url = SimpleFINLibClient.get_access_url(setup_token)
     except Exception as exc:
+        logger.warning("SimpleFIN token exchange failed: %s", exc)
         raise ValueError(
-            f"Failed to exchange setup token: {exc}. "
+            "Failed to exchange setup token. "
             "The token may have already been used (tokens are single-use) "
             "or is invalid."
         ) from exc

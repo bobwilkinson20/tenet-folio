@@ -113,9 +113,9 @@ class TestRemoveCredentials:
 
     @patch("services.provider_setup_service.delete_credential", return_value=False)
     def test_handles_delete_failure_gracefully(self, mock_delete):
-        """Returns result even if delete_credential returns False (key not found)."""
+        """Returns 'no credentials' message when key not found in Keychain."""
         result = remove_credentials("SimpleFIN")
-        assert "removed" in result.lower()
+        assert "no credentials" in result.lower()
 
     def test_unknown_provider_raises(self):
         """Unknown provider raises ValueError."""
