@@ -44,6 +44,7 @@ PROVIDER_CREDENTIAL_MAP: dict[str, list[ProviderFieldDef]] = {
     ],
 }
 
+
 def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
     """Return the credential field definitions for a provider's setup form.
 
@@ -122,7 +123,7 @@ def remove_credentials(provider_name: str) -> str:
             logger.info("Removed credential %s for %s", key, provider_name)
             removed.append(key)
         else:
-            logger.warning("Credential %s not found in Keychain for %s", key, provider_name)
+            logger.info("Credential %s not found in Keychain for %s", key, provider_name)
 
     if removed:
         return f"{provider_name} credentials removed"
