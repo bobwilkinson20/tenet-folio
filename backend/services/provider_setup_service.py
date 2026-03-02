@@ -6,6 +6,7 @@ and stores validated credentials in the macOS Keychain.
 """
 
 import logging
+from typing import Callable
 
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential, set_credential
@@ -88,10 +89,10 @@ def validate_and_store(provider_name: str, credentials: dict[str, str]) -> str:
         raise ValueError(f"No setup configuration for provider: {provider_name}")
 
     # Dispatch to provider-specific validation
-    if provider_name == "SimpleFIN":
-        return _validate_simplefin(credentials, fields)
-
-    raise ValueError(f"No validator implemented for provider: {provider_name}")
+    validator = _VALIDATORS.get(provider_name)
+    if validator is None:
+        raise ValueError(f"No validator implemented for provider: {provider_name}")
+    return validator(credentials, fields)
 
 
 def remove_credentials(provider_name: str) -> str:
@@ -111,8 +112,10 @@ def remove_credentials(provider_name: str) -> str:
         raise ValueError(f"No credential keys for provider: {provider_name}")
 
     for key in keys:
-        delete_credential(key)
-        logger.info("Removed credential %s for %s", key, provider_name)
+        if delete_credential(key):
+            logger.info("Removed credential %s for %s", key, provider_name)
+        else:
+            logger.warning("Credential %s not found in Keychain for %s", key, provider_name)
 
     return f"{provider_name} credentials removed"
 
@@ -129,7 +132,8 @@ def _validate_simplefin(
     if not setup_token:
         raise ValueError("Setup token is required")
 
-    # Exchange token for access URL using the simplefin library
+    # Inline import: simplefin is an optional dependency that may not be
+    # installed in all environments (e.g., test, CI without extras).
     from simplefin import SimpleFINClient as SimpleFINLibClient
 
     try:
@@ -141,8 +145,12 @@ def _validate_simplefin(
             "or is invalid."
         ) from exc
 
-    # Store the access URL
-    store_key = fields[0]["store_key"]
+    # Look up store_key from the field definition rather than hardcoding index
+    store_key_field = next((f for f in fields if f["key"] == "setup_token"), None)
+    if store_key_field is None:
+        raise ValueError("No field definition found for setup_token")
+    store_key = store_key_field["store_key"]
+
     if not set_credential(store_key, access_url):
         raise RuntimeError(
             "Failed to store credentials in Keychain. "
@@ -151,3 +159,10 @@ def _validate_simplefin(
 
     logger.info("SimpleFIN credentials validated and stored")
     return "SimpleFIN configured successfully. Access URL stored in Keychain."
+
+
+# Dispatch table for provider-specific validators.
+# Each validator receives (credentials, fields) and returns a success message.
+_VALIDATORS: dict[str, Callable[[dict[str, str], list[dict]], str]] = {
+    "SimpleFIN": _validate_simplefin,
+}

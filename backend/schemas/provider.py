@@ -1,7 +1,7 @@
 """Pydantic schemas for provider settings."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -43,4 +43,4 @@ class ProviderCredentialInfo(BaseModel):
     key: str
     label: str
     help_text: str = ""
-    input_type: str = "text"  # "text", "textarea", "password"
+    input_type: Literal["text", "textarea", "password"] = "text"

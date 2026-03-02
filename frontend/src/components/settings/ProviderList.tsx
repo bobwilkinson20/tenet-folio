@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { providersApi } from "@/api";
 import type { ProviderStatus } from "@/types/provider";
+import { extractApiErrorMessage } from "@/utils/errors";
 import { PlaidItemList } from "./PlaidItemList";
 import { ProviderSetupDialog } from "./ProviderSetupDialog";
 
@@ -84,8 +85,8 @@ export function ProviderList() {
     try {
       await providersApi.removeCredentials(providerName);
       await fetchProviders();
-    } catch {
-      // Refresh anyway to show current state
+    } catch (err) {
+      setError(extractApiErrorMessage(err, "Failed to remove credentials"));
       await fetchProviders();
     }
   };

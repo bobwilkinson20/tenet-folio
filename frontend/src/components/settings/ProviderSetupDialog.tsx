@@ -35,6 +35,7 @@ export function ProviderSetupDialog({
     if (!isOpen) return;
 
     // Reset state on open
+    setFields([]);
     setValues({});
     setError(null);
     setSuccessMessage(null);
