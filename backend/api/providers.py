@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from integrations.provider_registry import ProviderRegistry, get_provider_registry
-from schemas.provider import ProviderStatusResponse, ProviderUpdateRequest
+from schemas.provider import (
+    ProviderCredentialInfo,
+    ProviderSetupRequest,
+    ProviderSetupResponse,
+    ProviderStatusResponse,
+    ProviderUpdateRequest,
+)
 from services.provider_service import ALL_PROVIDER_NAMES, ProviderService
+from services import provider_setup_service
 
 logger = logging.getLogger(__name__)
 
@@ -49,3 +56,47 @@ def update_provider(
             return p
 
     raise HTTPException(status_code=404, detail=f"Provider not found: {name}")
+
+
+@router.get("/{name}/setup-info", response_model=list[ProviderCredentialInfo])
+def get_setup_info(name: str):
+    """Return field definitions for the provider's setup form."""
+    if name not in ALL_PROVIDER_NAMES:
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+
+    try:
+        return provider_setup_service.get_setup_fields(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{name}/setup", response_model=ProviderSetupResponse)
+def setup_provider(name: str, body: ProviderSetupRequest):
+    """Validate credentials and store in Keychain."""
+    if name not in ALL_PROVIDER_NAMES:
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+
+    try:
+        message = provider_setup_service.validate_and_store(name, body.credentials)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    logger.info("Provider %s configured via in-app setup", name)
+    return ProviderSetupResponse(provider=name, message=message)
+
+
+@router.delete("/{name}/credentials")
+def remove_credentials(name: str):
+    """Remove all credentials for a provider from Keychain."""
+    if name not in ALL_PROVIDER_NAMES:
+        raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+
+    try:
+        message = provider_setup_service.remove_credentials(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    logger.info("Provider %s credentials removed via in-app setup", name)
+    return {"message": message}

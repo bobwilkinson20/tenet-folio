@@ -44,6 +44,9 @@ vi.mock("../../api", () => ({
   providersApi: {
     list: vi.fn(),
     update: vi.fn(),
+    getSetupInfo: vi.fn(),
+    setup: vi.fn(),
+    removeCredentials: vi.fn(),
   },
 }));
 
@@ -169,6 +172,74 @@ describe("ProviderList", () => {
     // After error, should roll back to checked
     await waitFor(() => {
       expect(toggles[0]).toBeChecked();
+    });
+  });
+
+  it("shows Reconfigure button for configured SimpleFIN", async () => {
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    // SimpleFIN has credentials → Reconfigure + Remove
+    expect(screen.getByRole("button", { name: "Reconfigure" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+  });
+
+  it("shows Configure button for unconfigured SimpleFIN", async () => {
+    const providersWithoutSimpleFIN = mockProviders.map((p) =>
+      p.name === "SimpleFIN" ? { ...p, has_credentials: false } : p,
+    );
+    mockedList.mockResolvedValue({ data: providersWithoutSimpleFIN } as never);
+
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "Configure" })).toBeInTheDocument();
+  });
+
+  it("does not show setup buttons for non-setup providers", async () => {
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SnapTrade")).toBeInTheDocument();
+    });
+
+    // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
+    // Only SimpleFIN should have Reconfigure/Remove, not SnapTrade/Coinbase
+    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(1);
+  });
+
+  it("clicking Configure opens setup dialog", async () => {
+    const providersWithoutSimpleFIN = mockProviders.map((p) =>
+      p.name === "SimpleFIN" ? { ...p, has_credentials: false } : p,
+    );
+    mockedList.mockResolvedValue({ data: providersWithoutSimpleFIN } as never);
+    vi.mocked(providersApi.getSetupInfo).mockResolvedValue({
+      data: [
+        {
+          key: "setup_token",
+          label: "Setup Token",
+          help_text: "Paste token",
+          input_type: "password",
+        },
+      ],
+    } as never);
+
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Configure SimpleFIN")).toBeInTheDocument();
     });
   });
 });

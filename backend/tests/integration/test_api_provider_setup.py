@@ -1,0 +1,97 @@
+"""Integration tests for the provider setup API endpoints."""
+
+from unittest.mock import patch
+
+
+class TestGetSetupInfo:
+    """Tests for GET /api/providers/{name}/setup-info."""
+
+    def test_returns_simplefin_fields(self, client):
+        """Returns field definitions for SimpleFIN."""
+        response = client.get("/api/providers/SimpleFIN/setup-info")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["key"] == "setup_token"
+        assert data[0]["label"] == "Setup Token"
+        assert data[0]["input_type"] == "password"
+
+    def test_unknown_provider_404(self, client):
+        """Unknown provider returns 404."""
+        response = client.get("/api/providers/FakeProvider/setup-info")
+        assert response.status_code == 404
+
+    def test_provider_without_setup_404(self, client):
+        """Known provider without setup config returns 404."""
+        response = client.get("/api/providers/SnapTrade/setup-info")
+        assert response.status_code == 404
+
+
+class TestSetupProvider:
+    """Tests for POST /api/providers/{name}/setup."""
+
+    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("simplefin.SimpleFINClient.get_access_url")
+    def test_simplefin_setup_success(self, mock_get_url, mock_set_cred, client):
+        """Successful setup returns provider name and message."""
+        mock_get_url.return_value = "https://bridge.simplefin.org/access/abc123"
+
+        response = client.post(
+            "/api/providers/SimpleFIN/setup",
+            json={"credentials": {"setup_token": "dGVzdA=="}},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["provider"] == "SimpleFIN"
+        assert "successfully" in data["message"].lower()
+
+    @patch("simplefin.SimpleFINClient.get_access_url")
+    def test_simplefin_invalid_token_400(self, mock_get_url, client):
+        """Invalid token returns 400 with error detail."""
+        mock_get_url.side_effect = Exception("Invalid setup token")
+
+        response = client.post(
+            "/api/providers/SimpleFIN/setup",
+            json={"credentials": {"setup_token": "bad-token"}},
+        )
+        assert response.status_code == 400
+        assert "Failed to exchange" in response.json()["detail"]
+
+    def test_empty_credentials_400(self, client):
+        """Empty setup token returns 400."""
+        response = client.post(
+            "/api/providers/SimpleFIN/setup",
+            json={"credentials": {"setup_token": ""}},
+        )
+        assert response.status_code == 400
+
+    def test_unknown_provider_404(self, client):
+        """Unknown provider returns 404."""
+        response = client.post(
+            "/api/providers/FakeProvider/setup",
+            json={"credentials": {"key": "value"}},
+        )
+        assert response.status_code == 404
+
+
+class TestRemoveCredentials:
+    """Tests for DELETE /api/providers/{name}/credentials."""
+
+    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    def test_remove_success(self, mock_delete, client):
+        """Successful removal returns message."""
+        response = client.delete("/api/providers/SimpleFIN/credentials")
+        assert response.status_code == 200
+        assert "removed" in response.json()["message"].lower()
+
+    def test_unknown_provider_404(self, client):
+        """Unknown provider returns 404."""
+        response = client.delete("/api/providers/FakeProvider/credentials")
+        assert response.status_code == 404
+
+    def test_provider_without_setup_404(self, client):
+        """Known provider without credential config returns 404."""
+        response = client.delete("/api/providers/SnapTrade/credentials")
+        assert response.status_code == 404

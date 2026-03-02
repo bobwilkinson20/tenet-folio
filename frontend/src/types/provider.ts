@@ -5,3 +5,15 @@ export interface ProviderStatus {
   account_count: number;
   last_sync_time: string | null;
 }
+
+export interface ProviderSetupField {
+  key: string;
+  label: string;
+  help_text: string;
+  input_type: "text" | "textarea" | "password";
+}
+
+export interface ProviderSetupResponse {
+  provider: string;
+  message: string;
+}

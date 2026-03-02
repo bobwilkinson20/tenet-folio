@@ -22,3 +22,25 @@ class ProviderUpdateRequest(BaseModel):
     """Request body for updating provider settings."""
 
     is_enabled: bool
+
+
+class ProviderSetupRequest(BaseModel):
+    """Request body for provider setup. Credentials vary by provider."""
+
+    credentials: dict[str, str]
+
+
+class ProviderSetupResponse(BaseModel):
+    """Response after successful provider setup."""
+
+    provider: str
+    message: str
+
+
+class ProviderCredentialInfo(BaseModel):
+    """Describes a credential field for a provider's setup form."""
+
+    key: str
+    label: str
+    help_text: str = ""
+    input_type: str = "text"  # "text", "textarea", "password"

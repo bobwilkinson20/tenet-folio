@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { providersApi } from "@/api";
 import type { ProviderStatus } from "@/types/provider";
 import { PlaidItemList } from "./PlaidItemList";
+import { ProviderSetupDialog } from "./ProviderSetupDialog";
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   SnapTrade: "Brokerage aggregator supporting many institutions",
@@ -15,6 +16,9 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   Schwab: "Charles Schwab brokerage accounts",
   Plaid: "Bank and investment aggregator via Plaid Link",
 };
+
+/** Providers that support in-app setup via the setup dialog. */
+const PROVIDERS_WITH_SETUP = new Set(["SimpleFIN"]);
 
 function formatSyncTime(isoString: string): string {
   const date = new Date(isoString);
@@ -26,6 +30,7 @@ export function ProviderList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingProvider, setTogglingProvider] = useState<string | null>(null);
+  const [setupProvider, setSetupProvider] = useState<string | null>(null);
 
   const fetchProviders = async () => {
     try {
@@ -73,6 +78,18 @@ export function ProviderList() {
     }
   };
 
+  const handleRemoveCredentials = async (providerName: string) => {
+    if (!window.confirm(`Remove credentials for ${providerName}?`)) return;
+
+    try {
+      await providersApi.removeCredentials(providerName);
+      await fetchProviders();
+    } catch {
+      // Refresh anyway to show current state
+      await fetchProviders();
+    }
+  };
+
   if (loading) {
     return <div className="text-tf-text-tertiary">Loading providers...</div>;
   }
@@ -84,8 +101,8 @@ export function ProviderList() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-tf-text-secondary">
-        Manage which data providers are active during sync. Credentials are
-        configured in your <code>.env</code> file.
+        Manage which data providers are active during sync. Configure providers
+        below or via your <code>.env</code> file.
       </p>
 
       <div className="space-y-3">
@@ -143,6 +160,33 @@ export function ProviderList() {
                   </span>
                 )}
               </div>
+              {PROVIDERS_WITH_SETUP.has(provider.name) && (
+                <div className="mt-2 flex gap-2">
+                  {provider.has_credentials ? (
+                    <>
+                      <button
+                        onClick={() => setSetupProvider(provider.name)}
+                        className="rounded border border-tf-border-default px-3 py-1 text-xs font-medium text-tf-text-secondary hover:bg-tf-bg-elevated"
+                      >
+                        Reconfigure
+                      </button>
+                      <button
+                        onClick={() => handleRemoveCredentials(provider.name)}
+                        className="rounded border border-tf-negative/30 px-3 py-1 text-xs font-medium text-tf-negative hover:bg-tf-negative/10"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setSetupProvider(provider.name)}
+                      className="rounded bg-tf-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-tf-accent-primary/90"
+                    >
+                      Configure
+                    </button>
+                  )}
+                </div>
+              )}
               {provider.name === "Plaid" && provider.has_credentials && (
                 <PlaidItemList />
               )}
@@ -150,6 +194,15 @@ export function ProviderList() {
           </div>
         ))}
       </div>
+
+      {setupProvider && (
+        <ProviderSetupDialog
+          providerName={setupProvider}
+          isOpen={true}
+          onClose={() => setSetupProvider(null)}
+          onSuccess={() => fetchProviders()}
+        />
+      )}
     </div>
   );
 }
