@@ -18,5 +18,5 @@ export const providersApi = {
       credentials,
     }),
   removeCredentials: (name: string) =>
-    apiClient.delete(`/providers/${name}/credentials`),
+    apiClient.delete<ProviderSetupResponse>(`/providers/${name}/credentials`),
 };

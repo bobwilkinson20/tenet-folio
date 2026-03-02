@@ -54,6 +54,7 @@ import { providersApi } from "../../api";
 
 const mockedList = vi.mocked(providersApi.list);
 const mockedUpdate = vi.mocked(providersApi.update);
+const mockedRemoveCredentials = vi.mocked(providersApi.removeCredentials);
 
 describe("ProviderList", () => {
   beforeEach(() => {
@@ -212,6 +213,58 @@ describe("ProviderList", () => {
     // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
     // Only SimpleFIN should have Reconfigure/Remove, not SnapTrade/Coinbase
     expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(1);
+  });
+
+  it("clicking Remove calls removeCredentials after confirm", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedRemoveCredentials.mockResolvedValue({ data: { provider: "SimpleFIN", message: "removed" } } as never);
+
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(window.confirm).toHaveBeenCalledWith("Remove credentials for SimpleFIN?");
+    await waitFor(() => {
+      expect(mockedRemoveCredentials).toHaveBeenCalledWith("SimpleFIN");
+    });
+  });
+
+  it("clicking Remove does nothing when confirm is cancelled", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(mockedRemoveCredentials).not.toHaveBeenCalled();
+  });
+
+  it("shows error when removeCredentials fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockedRemoveCredentials.mockRejectedValue({
+      response: { data: { detail: "Keychain unavailable" } },
+    });
+
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Keychain unavailable")).toBeInTheDocument();
+    });
   });
 
   it("clicking Configure opens setup dialog", async () => {

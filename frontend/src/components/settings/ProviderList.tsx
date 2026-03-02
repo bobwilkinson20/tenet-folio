@@ -86,8 +86,8 @@ export function ProviderList() {
       await providersApi.removeCredentials(providerName);
       await fetchProviders();
     } catch (err) {
-      setError(extractApiErrorMessage(err, "Failed to remove credentials"));
       await fetchProviders();
+      setError(extractApiErrorMessage(err, "Failed to remove credentials"));
     }
   };
 
