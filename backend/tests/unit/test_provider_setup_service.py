@@ -93,6 +93,12 @@ class TestValidateAndStore:
         with pytest.raises(ValueError, match="No validator implemented"):
             validate_and_store("TestProvider", {"tok": "value"})
 
+    @patch.dict("sys.modules", {"simplefin": None})
+    def test_simplefin_library_not_installed(self):
+        """Missing simplefin library raises RuntimeError with helpful message."""
+        with pytest.raises(RuntimeError, match="SimpleFIN library is not installed"):
+            validate_and_store("SimpleFIN", {"setup_token": "dGVzdA=="})
+
 
 class TestRemoveCredentials:
     """Tests for remove_credentials()."""
