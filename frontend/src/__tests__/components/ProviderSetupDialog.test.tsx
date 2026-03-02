@@ -102,7 +102,7 @@ describe("ProviderSetupDialog", () => {
       ).toBeInTheDocument();
     });
 
-    expect(onSuccess).toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
   it("shows error on setup failure", async () => {

@@ -114,7 +114,7 @@ def remove_credentials(provider_name: str) -> str:
     """
     fields = PROVIDER_CREDENTIAL_MAP.get(provider_name)
     if fields is None:
-        raise ValueError(f"No credential keys for provider: {provider_name}")
+        raise ValueError(f"No setup configuration for provider: {provider_name}")
 
     removed = []
     for field in fields:

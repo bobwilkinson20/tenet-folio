@@ -86,7 +86,7 @@ class TestValidateAndStore:
 
     @patch(
         "services.provider_setup_service.PROVIDER_CREDENTIAL_MAP",
-        {"TestProvider": [{"key": "tok", "store_key": "TOK", "label": "Token"}]},
+        {"TestProvider": [{"key": "tok", "store_key": "TOK", "label": "Token", "help_text": "", "input_type": "text"}]},
     )
     def test_provider_in_map_but_no_validator_raises(self):
         """Provider in PROVIDER_CREDENTIAL_MAP but not in _VALIDATORS raises ValueError."""
@@ -119,5 +119,5 @@ class TestRemoveCredentials:
 
     def test_unknown_provider_raises(self):
         """Unknown provider raises ValueError."""
-        with pytest.raises(ValueError, match="No credential keys"):
+        with pytest.raises(ValueError, match="No setup configuration"):
             remove_credentials("UnknownProvider")
