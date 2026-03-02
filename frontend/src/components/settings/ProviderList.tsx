@@ -29,6 +29,7 @@ export function ProviderList() {
   const [error, setError] = useState<string | null>(null);
   const [togglingProvider, setTogglingProvider] = useState<string | null>(null);
   const [setupProvider, setSetupProvider] = useState<string | null>(null);
+  const [removingProvider, setRemovingProvider] = useState<string | null>(null);
 
   const fetchProviders = async () => {
     try {
@@ -78,12 +79,15 @@ export function ProviderList() {
 
   const handleRemoveCredentials = async (providerName: string) => {
     if (!window.confirm(`Remove credentials for ${providerName}?`)) return;
+    setRemovingProvider(providerName);
 
     try {
       await providersApi.removeCredentials(providerName);
       await fetchProviders();
     } catch (err) {
       setError(extractApiErrorMessage(err, "Failed to remove credentials"));
+    } finally {
+      setRemovingProvider(null);
     }
   };
 
@@ -169,9 +173,10 @@ export function ProviderList() {
                       </button>
                       <button
                         onClick={() => handleRemoveCredentials(provider.name)}
-                        className="rounded border border-tf-negative/30 px-3 py-1 text-xs font-medium text-tf-negative hover:bg-tf-negative/10"
+                        disabled={removingProvider === provider.name}
+                        className="rounded border border-tf-negative/30 px-3 py-1 text-xs font-medium text-tf-negative hover:bg-tf-negative/10 disabled:opacity-50"
                       >
-                        Remove
+                        {removingProvider === provider.name ? "Removing..." : "Remove"}
                       </button>
                     </>
                   ) : (
