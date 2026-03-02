@@ -278,24 +278,30 @@ def _validate_ibkr(
     # Download a test Flex report to validate credentials.
     # The ibflex download function uses an internal polling loop with no
     # timeout parameter, so we wrap it in a thread with a timeout to prevent
-    # the request handler from blocking indefinitely.
+    # the request handler from blocking indefinitely.  We avoid a `with`
+    # block because its implicit shutdown(wait=True) would block until the
+    # thread finishes — defeating the timeout.
+    executor = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(ibflex_client.download, flex_token, flex_query_id)
-            data = future.result(timeout=60)
+        future = executor.submit(ibflex_client.download, flex_token, flex_query_id)
+        data = future.result(timeout=60)
     except FuturesTimeoutError:
+        executor.shutdown(wait=False)
         logger.warning("IBKR Flex download timed out after 60s")
         raise ValueError(
             "IBKR download timed out. The Flex Web Service may be slow or "
             "unresponsive. Please try again later."
         )
     except Exception as exc:
+        executor.shutdown(wait=False)
         logger.warning("IBKR Flex credential validation failed: %s", exc)
         raise ValueError(
             "Failed to validate IBKR credentials. "
             "Check that your Flex Token and Query ID are correct. "
             "Common issues: expired token, invalid query ID, or IP restriction."
         ) from exc
+    else:
+        executor.shutdown(wait=False)
 
     # Check required sections
     missing_sections = validate_query_sections(data)

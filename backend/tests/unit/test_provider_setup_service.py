@@ -224,25 +224,23 @@ class TestValidateAndStore:
                 "IBKR", {"flex_token": "bad", "flex_query_id": "bad"}
             )
 
-    @patch("ibflex.client.download", side_effect=lambda *a: (_ for _ in ()).throw(TimeoutError()))
-    def test_ibkr_download_timeout(self, mock_download):
+    def test_ibkr_download_timeout(self):
         """Download timeout raises ValueError with timeout message."""
         from concurrent.futures import TimeoutError as FuturesTimeoutError
         from unittest.mock import MagicMock
 
-        # Simulate a timeout by making future.result() raise TimeoutError
         with patch(
             "services.provider_setup_service.ThreadPoolExecutor"
         ) as mock_pool_cls:
             mock_executor = MagicMock()
-            mock_pool_cls.return_value.__enter__ = MagicMock(return_value=mock_executor)
-            mock_pool_cls.return_value.__exit__ = MagicMock(return_value=False)
+            mock_pool_cls.return_value = mock_executor
             mock_executor.submit.return_value.result.side_effect = FuturesTimeoutError()
 
             with pytest.raises(ValueError, match="timed out"):
                 validate_and_store(
                     "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
                 )
+            mock_executor.shutdown.assert_called_once_with(wait=False)
 
     @patch("services.provider_setup_service.set_credential")
     @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))

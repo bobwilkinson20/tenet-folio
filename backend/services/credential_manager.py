@@ -115,7 +115,11 @@ def set_credential(key: str, value: str) -> bool:
 
     # Verify the write — keyring.set_password() can return without error
     # even when the user declines a macOS Keychain access prompt.
-    stored = keyring.get_password(SERVICE_NAME, key)
+    try:
+        stored = keyring.get_password(SERVICE_NAME, key)
+    except Exception:
+        logger.warning("Keychain read-back failed for %s", key, exc_info=True)
+        return False
     if stored != value:
         logger.warning(
             "Keychain write verification failed for %s "

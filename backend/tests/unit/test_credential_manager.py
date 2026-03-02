@@ -241,3 +241,12 @@ class TestProfileServiceName:
         with patch.dict(sys.modules, {"keyring": mock_keyring}):
             delete_credential("PLAID_CLIENT_ID")
         mock_keyring.delete_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID")
+
+    def test_set_credential_readback_exception_returns_false(self):
+        """set_credential returns False when keyring.get_password raises during read-back."""
+        mock_keyring = MagicMock()
+        mock_keyring.set_password.return_value = None
+        mock_keyring.get_password.side_effect = Exception("Keychain access denied")
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            result = set_credential("PLAID_CLIENT_ID", "cid123")
+        assert result is False
