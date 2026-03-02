@@ -87,7 +87,7 @@ def setup_provider(name: str, body: ProviderSetupRequest):
     return ProviderSetupResponse(provider=name, message=message)
 
 
-@router.delete("/{name}/credentials")
+@router.delete("/{name}/credentials", response_model=ProviderSetupResponse)
 def remove_credentials(name: str):
     """Remove all credentials for a provider from Keychain."""
     if name not in ALL_PROVIDER_NAMES:
@@ -99,4 +99,4 @@ def remove_credentials(name: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     logger.info("Provider %s credentials removed via in-app setup", name)
-    return {"message": message}
+    return ProviderSetupResponse(provider=name, message=message)

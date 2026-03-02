@@ -96,7 +96,20 @@ export function ProviderSetupDialog({
         </div>
       )}
 
-      {!loading && !successMessage && (
+      {!loading && !successMessage && error && fields.length === 0 && (
+        <div className="space-y-4">
+          <p className="text-sm text-tf-negative">{error}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded border border-tf-border-default px-4 py-2 text-sm font-medium text-tf-text-secondary hover:bg-tf-bg-elevated"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
+      {!loading && !successMessage && fields.length > 0 && (
         <form onSubmit={handleSubmit} className="space-y-4">
           {fields.map((field) => (
             <div key={field.key}>

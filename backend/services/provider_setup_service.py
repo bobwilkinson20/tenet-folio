@@ -34,12 +34,6 @@ PROVIDER_CREDENTIAL_MAP: dict[str, list[dict]] = {
     ],
 }
 
-# Maps provider name → list of Keychain keys to delete on removal.
-PROVIDER_CREDENTIAL_KEYS: dict[str, list[str]] = {
-    "SimpleFIN": ["SIMPLEFIN_ACCESS_URL"],
-}
-
-
 def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
     """Return the credential field definitions for a provider's setup form.
 
@@ -107,11 +101,11 @@ def remove_credentials(provider_name: str) -> str:
     Raises:
         ValueError: If the provider is unknown.
     """
-    keys = PROVIDER_CREDENTIAL_KEYS.get(provider_name)
-    if keys is None:
+    fields = PROVIDER_CREDENTIAL_MAP.get(provider_name)
+    if fields is None:
         raise ValueError(f"No credential keys for provider: {provider_name}")
 
-    for key in keys:
+    for key in [f["store_key"] for f in fields]:
         if delete_credential(key):
             logger.info("Removed credential %s for %s", key, provider_name)
         else:
@@ -134,7 +128,13 @@ def _validate_simplefin(
 
     # Inline import: simplefin is an optional dependency that may not be
     # installed in all environments (e.g., test, CI without extras).
-    from simplefin import SimpleFINClient as SimpleFINLibClient
+    try:
+        from simplefin import SimpleFINClient as SimpleFINLibClient
+    except ImportError as exc:
+        raise RuntimeError(
+            "SimpleFIN library is not installed. "
+            "Install it with: uv add simplefin"
+        ) from exc
 
     try:
         access_url = SimpleFINLibClient.get_access_url(setup_token)
