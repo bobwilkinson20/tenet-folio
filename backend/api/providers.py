@@ -16,6 +16,7 @@ from schemas.provider import (
 )
 from services.provider_service import ALL_PROVIDER_NAMES, ProviderService
 from services import provider_setup_service
+from services.provider_setup_service import PROVIDER_CREDENTIAL_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,11 @@ def setup_provider(name: str, body: ProviderSetupRequest):
     """Validate credentials and store in Keychain."""
     if name not in ALL_PROVIDER_NAMES:
         raise HTTPException(status_code=404, detail=f"Unknown provider: {name}")
+    if name not in PROVIDER_CREDENTIAL_MAP:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No setup configuration for provider: {name}",
+        )
 
     try:
         message = provider_setup_service.validate_and_store(name, body.credentials)

@@ -6,7 +6,7 @@ and stores validated credentials in the macOS Keychain.
 """
 
 import logging
-from typing import Callable, TypedDict
+from typing import Callable, Literal, TypedDict
 
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential, set_credential
@@ -20,7 +20,7 @@ class ProviderFieldDef(TypedDict):
     key: str
     label: str
     help_text: str
-    input_type: str
+    input_type: Literal["text", "textarea", "password"]
     store_key: str
 
 
