@@ -6,10 +6,8 @@ from unittest.mock import patch
 
 import pytest
 from ibflex.Types import (
-    CashReportCurrency,
     FlexQueryResponse,
     FlexStatement,
-    OpenPosition,
     Trade,
 )
 from ibflex.client import IbflexClientError, ResponseCodeError
@@ -64,119 +62,45 @@ class TestValidateCredentials:
 
 
 class TestValidateQuerySections:
-    """Tests for the validate_query_sections function."""
+    """Tests for the validate_query_sections function.
 
-    def _make_response(self, positions=(), cash=(), trades=()):
-        """Helper to build a FlexQueryResponse with specified sections."""
-        stmt = FlexStatement(
-            accountId="U1234567",
-            fromDate=datetime.date(2024, 1, 1),
-            toDate=datetime.date(2024, 12, 31),
-            period="Last365CalendarDays",
-            whenGenerated=datetime.datetime(2024, 6, 15, 12, 0, 0),
-            OpenPositions=positions,
-            CashReport=cash,
-            Trades=trades,
-        )
-        return FlexQueryResponse(
-            queryName="Test", type="AF", FlexStatements=(stmt,)
-        )
+    validate_query_sections inspects raw XML bytes for section element tags,
+    not parsed data, so tests pass crafted XML directly.
+    """
 
-    @patch("scripts.setup_ibkr.parser")
-    def test_all_sections_present(self, mock_parser):
-        """No missing sections when all are present."""
-        response = self._make_response(
-            positions=(
-                OpenPosition(
-                    accountId="U1234567",
-                    symbol="AAPL",
-                    position=Decimal("100"),
-                    markPrice=Decimal("175.00"),
-                    currency="USD",
-                ),
-            ),
-            cash=(
-                CashReportCurrency(
-                    accountId="U1234567",
-                    currency="USD",
-                    endingCash=Decimal("1000"),
-                ),
-            ),
-            trades=(
-                Trade(
-                    accountId="U1234567",
-                    tradeID="T1",
-                    symbol="AAPL",
-                    tradeDate=datetime.date(2024, 1, 15),
-                ),
-            ),
-        )
-        mock_parser.parse.return_value = response
+    def test_all_sections_present(self):
+        """No missing sections when all tags appear in XML."""
+        xml = b"<FlexStatement><OpenPositions/><CashReport/><Trades/></FlexStatement>"
+        assert validate_query_sections(xml) == []
 
-        missing = validate_query_sections(b"<xml>data</xml>")
-        assert missing == []
-
-    @patch("scripts.setup_ibkr.parser")
-    def test_all_sections_missing(self, mock_parser):
-        """All sections reported missing when query has none."""
-        response = self._make_response()
-        mock_parser.parse.return_value = response
-
-        missing = validate_query_sections(b"<xml>data</xml>")
+    def test_all_sections_missing(self):
+        """All sections reported missing when none appear in XML."""
+        xml = b"<FlexStatement></FlexStatement>"
+        missing = validate_query_sections(xml)
         assert "Open Positions" in missing
         assert "Cash Report" in missing
         assert "Trades" in missing
 
-    @patch("scripts.setup_ibkr.parser")
-    def test_only_positions_missing(self, mock_parser):
-        """Only Open Positions reported missing when others are present."""
-        response = self._make_response(
-            cash=(
-                CashReportCurrency(
-                    accountId="U1234567",
-                    currency="USD",
-                    endingCash=Decimal("1000"),
-                ),
-            ),
-            trades=(
-                Trade(
-                    accountId="U1234567",
-                    tradeID="T1",
-                    symbol="AAPL",
-                    tradeDate=datetime.date(2024, 1, 15),
-                ),
-            ),
+    def test_only_positions_missing(self):
+        """Only Open Positions reported missing."""
+        xml = b"<FlexStatement><CashReport/><Trades/></FlexStatement>"
+        assert validate_query_sections(xml) == ["Open Positions"]
+
+    def test_only_trades_missing(self):
+        """Only Trades reported missing."""
+        xml = b"<FlexStatement><OpenPositions/><CashReport/></FlexStatement>"
+        assert validate_query_sections(xml) == ["Trades"]
+
+    def test_empty_sections_still_detected(self):
+        """Sections with no child rows are still detected as present."""
+        xml = (
+            b"<FlexStatement>"
+            b"<OpenPositions></OpenPositions>"
+            b"<CashReport></CashReport>"
+            b"<Trades></Trades>"
+            b"</FlexStatement>"
         )
-        mock_parser.parse.return_value = response
-
-        missing = validate_query_sections(b"<xml>data</xml>")
-        assert missing == ["Open Positions"]
-
-    @patch("scripts.setup_ibkr.parser")
-    def test_only_trades_missing(self, mock_parser):
-        """Only Trades reported missing when others are present."""
-        response = self._make_response(
-            positions=(
-                OpenPosition(
-                    accountId="U1234567",
-                    symbol="AAPL",
-                    position=Decimal("100"),
-                    markPrice=Decimal("175.00"),
-                    currency="USD",
-                ),
-            ),
-            cash=(
-                CashReportCurrency(
-                    accountId="U1234567",
-                    currency="USD",
-                    endingCash=Decimal("1000"),
-                ),
-            ),
-        )
-        mock_parser.parse.return_value = response
-
-        missing = validate_query_sections(b"<xml>data</xml>")
-        assert missing == ["Trades"]
+        assert validate_query_sections(xml) == []
 
 
 class TestValidateTradeColumns:
@@ -264,14 +188,14 @@ class TestValidateTradeColumns:
         assert "settleDateTarget" in missing_rec
 
     @patch("scripts.setup_ibkr.parser")
-    def test_no_trades_returns_all_columns(self, mock_parser):
-        """When no trades exist, all columns reported as missing."""
+    def test_no_trades_skips_validation(self, mock_parser):
+        """When no trades exist, column validation is skipped (empty lists)."""
         response = self._make_response(trades=())
         mock_parser.parse.return_value = response
 
         missing_req, missing_rec = validate_trade_columns(b"<xml>data</xml>")
-        assert len(missing_req) > 0
-        assert len(missing_rec) > 0
+        assert missing_req == []
+        assert missing_rec == []
 
 
 class TestMainFlow:

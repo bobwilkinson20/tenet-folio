@@ -57,11 +57,15 @@ class TestGetCredential:
 class TestSetCredential:
     def test_stores_value(self):
         mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = "secret123"
         with patch.dict(sys.modules, {"keyring": mock_keyring}):
             result = set_credential("SNAPTRADE_CLIENT_ID", "secret123")
         assert result is True
         mock_keyring.set_password.assert_called_once_with(
             SERVICE_NAME, "SNAPTRADE_CLIENT_ID", "secret123"
+        )
+        mock_keyring.get_password.assert_called_once_with(
+            SERVICE_NAME, "SNAPTRADE_CLIENT_ID"
         )
 
     def test_rejects_non_credential_key(self):
@@ -89,6 +93,16 @@ class TestSetCredential:
         with patch.dict(sys.modules, {"keyring": mock_keyring}):
             result = set_credential("SNAPTRADE_CLIENT_ID", "secret123")
         assert result is False
+
+    def test_returns_false_when_readback_fails(self):
+        """Detects silent keychain failures (e.g. user declined access prompt)."""
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None  # write didn't persist
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            result = set_credential("SNAPTRADE_CLIENT_ID", "secret123")
+        assert result is False
+        mock_keyring.set_password.assert_called_once()
+        mock_keyring.get_password.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +230,7 @@ class TestProfileServiceName:
     def test_set_credential_uses_service_name(self):
         """set_credential passes SERVICE_NAME to keyring.set_password."""
         mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = "cid123"
         with patch.dict(sys.modules, {"keyring": mock_keyring}):
             set_credential("PLAID_CLIENT_ID", "cid123")
         mock_keyring.set_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID", "cid123")
@@ -226,3 +241,12 @@ class TestProfileServiceName:
         with patch.dict(sys.modules, {"keyring": mock_keyring}):
             delete_credential("PLAID_CLIENT_ID")
         mock_keyring.delete_password.assert_called_once_with(SERVICE_NAME, "PLAID_CLIENT_ID")
+
+    def test_set_credential_readback_exception_returns_false(self):
+        """set_credential returns False when keyring.get_password raises during read-back."""
+        mock_keyring = MagicMock()
+        mock_keyring.set_password.return_value = None
+        mock_keyring.get_password.side_effect = Exception("Keychain access denied")
+        with patch.dict(sys.modules, {"keyring": mock_keyring}):
+            result = set_credential("PLAID_CLIENT_ID", "cid123")
+        assert result is False

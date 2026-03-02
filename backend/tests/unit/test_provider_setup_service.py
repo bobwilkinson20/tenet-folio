@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from services.provider_setup_service import (
+    SetupResult,
     get_setup_fields,
     remove_credentials,
     validate_and_store,
@@ -22,6 +23,17 @@ class TestGetSetupFields:
         assert fields[0].label == "Setup Token"
         assert fields[0].input_type == "password"
         assert fields[0].help_text  # non-empty
+
+    def test_returns_ibkr_fields(self):
+        """IBKR returns two fields: flex_token and flex_query_id."""
+        fields = get_setup_fields("IBKR")
+        assert len(fields) == 2
+        assert fields[0].key == "flex_token"
+        assert fields[0].label == "Flex Token"
+        assert fields[0].input_type == "password"
+        assert fields[1].key == "flex_query_id"
+        assert fields[1].label == "Flex Query ID"
+        assert fields[1].input_type == "text"
 
     def test_unknown_provider_raises(self):
         """Unknown provider raises ValueError."""
@@ -46,11 +58,13 @@ class TestValidateAndStore:
 
         result = validate_and_store("SimpleFIN", {"setup_token": "dGVzdA=="})
 
+        assert isinstance(result, SetupResult)
         mock_get_url.assert_called_once_with("dGVzdA==")
         mock_set_cred.assert_called_once_with(
             "SIMPLEFIN_ACCESS_URL", "https://bridge.simplefin.org/access/abc123"
         )
-        assert "successfully" in result.lower()
+        assert "successfully" in result.message.lower()
+        assert result.warnings == []
 
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_invalid_token(self, mock_get_url):
@@ -117,6 +131,132 @@ class TestValidateAndStore:
         with pytest.raises(RuntimeError, match="SimpleFIN library is not installed"):
             validate_and_store("SimpleFIN", {"setup_token": "dGVzdA=="})
 
+    # --- IBKR tests ---
+
+    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_success(
+        self, mock_download, mock_sections, mock_columns, mock_set_cred
+    ):
+        """Successful IBKR setup validates and stores both credentials."""
+        result = validate_and_store(
+            "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+        )
+
+        assert isinstance(result, SetupResult)
+        assert "successfully" in result.message.lower()
+        assert result.warnings == []
+        mock_download.assert_called_once_with("tok123", "456")
+        mock_sections.assert_called_once_with(b"<xml>report</xml>")
+        mock_columns.assert_called_once_with(b"<xml>report</xml>")
+        assert mock_set_cred.call_count == 2
+        mock_set_cred.assert_any_call("IBKR_FLEX_TOKEN", "tok123")
+        mock_set_cred.assert_any_call("IBKR_FLEX_QUERY_ID", "456")
+
+    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch(
+        "scripts.setup_ibkr.validate_trade_columns",
+        return_value=([], ["buySell", "netCash"]),
+    )
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_success_with_warnings(
+        self, mock_download, mock_sections, mock_columns, mock_set_cred
+    ):
+        """Valid IBKR setup with missing recommended columns returns warnings."""
+        result = validate_and_store(
+            "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+        )
+
+        assert isinstance(result, SetupResult)
+        assert "successfully" in result.message.lower()
+        assert len(result.warnings) == 1
+        assert "buySell" in result.warnings[0]
+        assert "netCash" in result.warnings[0]
+        assert mock_set_cred.call_count == 2
+
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=["Open Positions", "Cash Report"])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_missing_sections(self, mock_download, mock_sections):
+        """Missing required sections raises ValueError listing sections and their columns."""
+        with pytest.raises(ValueError, match="missing required sections") as exc_info:
+            validate_and_store(
+                "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+            )
+        msg = str(exc_info.value)
+        assert "Open Positions (columns:" in msg
+        assert "Cash Report (columns:" in msg
+        assert "Symbol" in msg
+        assert "EndingCash" in msg
+
+    @patch(
+        "scripts.setup_ibkr.validate_trade_columns",
+        return_value=(["tradeID"], []),
+    )
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_missing_required_columns(
+        self, mock_download, mock_sections, mock_columns
+    ):
+        """Missing required trade columns raises ValueError."""
+        with pytest.raises(ValueError, match="missing required columns.*tradeID"):
+            validate_and_store(
+                "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+            )
+
+    def test_ibkr_empty_token(self):
+        """Empty Flex Token raises ValueError."""
+        with pytest.raises(ValueError, match="Flex Token is required"):
+            validate_and_store("IBKR", {"flex_token": "", "flex_query_id": "456"})
+
+    def test_ibkr_empty_query_id(self):
+        """Empty Flex Query ID raises ValueError."""
+        with pytest.raises(ValueError, match="Flex Query ID is required"):
+            validate_and_store("IBKR", {"flex_token": "tok123", "flex_query_id": ""})
+
+    @patch("ibflex.client.download", side_effect=Exception("Invalid token"))
+    def test_ibkr_invalid_credentials(self, mock_download):
+        """ibflex download error raises ValueError with actionable message."""
+        with pytest.raises(ValueError, match="Failed to validate IBKR credentials"):
+            validate_and_store(
+                "IBKR", {"flex_token": "bad", "flex_query_id": "bad"}
+            )
+
+    def test_ibkr_download_timeout(self):
+        """Download timeout raises ValueError with timeout message."""
+        from concurrent.futures import TimeoutError as FuturesTimeoutError
+        from unittest.mock import MagicMock
+
+        with patch(
+            "services.provider_setup_service.ThreadPoolExecutor"
+        ) as mock_pool_cls:
+            mock_executor = MagicMock()
+            mock_pool_cls.return_value = mock_executor
+            mock_executor.submit.return_value.result.side_effect = FuturesTimeoutError()
+
+            with pytest.raises(ValueError, match="timed out"):
+                validate_and_store(
+                    "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+                )
+            mock_executor.shutdown.assert_called_once_with(wait=False)
+
+    @patch("services.provider_setup_service.set_credential")
+    @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_keychain_failure(
+        self, mock_download, mock_sections, mock_columns, mock_set_cred
+    ):
+        """Keychain storage failure raises RuntimeError."""
+        mock_set_cred.return_value = False
+
+        with pytest.raises(RuntimeError, match="Failed to store"):
+            validate_and_store(
+                "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
+            )
+
 
 class TestRemoveCredentials:
     """Tests for remove_credentials()."""
@@ -135,7 +275,77 @@ class TestRemoveCredentials:
         result = remove_credentials("SimpleFIN")
         assert "no credentials" in result.lower()
 
+    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    def test_removes_ibkr_keys(self, mock_delete):
+        """Removes IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID from keychain."""
+        result = remove_credentials("IBKR")
+
+        assert mock_delete.call_count == 2
+        mock_delete.assert_any_call("IBKR_FLEX_TOKEN")
+        mock_delete.assert_any_call("IBKR_FLEX_QUERY_ID")
+        assert "removed" in result.lower()
+
     def test_unknown_provider_raises(self):
         """Unknown provider raises ValueError."""
         with pytest.raises(ValueError, match="No setup configuration"):
             remove_credentials("UnknownProvider")
+
+
+class TestSettingsSync:
+    """Tests that validate_and_store / remove_credentials sync the settings singleton."""
+
+    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("simplefin.SimpleFINClient.get_access_url")
+    def test_simplefin_setup_updates_settings(self, mock_get_url, mock_set_cred):
+        """SimpleFIN setup updates settings.simplefin_access_url in memory."""
+        from config import settings
+
+        original = settings.SIMPLEFIN_ACCESS_URL
+        mock_get_url.return_value = "https://bridge.simplefin.org/access/new123"
+
+        try:
+            validate_and_store("SimpleFIN", {"setup_token": "dGVzdA=="})
+            assert settings.SIMPLEFIN_ACCESS_URL == "https://bridge.simplefin.org/access/new123"
+        finally:
+            settings.SIMPLEFIN_ACCESS_URL = original
+
+    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
+    @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
+    @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
+    def test_ibkr_setup_updates_settings(
+        self, mock_download, mock_sections, mock_columns, mock_set_cred
+    ):
+        """IBKR setup updates settings.ibkr_flex_token and ibkr_flex_query_id."""
+        from config import settings
+
+        orig_token = settings.IBKR_FLEX_TOKEN
+        orig_qid = settings.IBKR_FLEX_QUERY_ID
+
+        try:
+            validate_and_store(
+                "IBKR", {"flex_token": "newtok", "flex_query_id": "789"}
+            )
+            assert settings.IBKR_FLEX_TOKEN == "newtok"
+            assert settings.IBKR_FLEX_QUERY_ID == "789"
+        finally:
+            settings.IBKR_FLEX_TOKEN = orig_token
+            settings.IBKR_FLEX_QUERY_ID = orig_qid
+
+    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    def test_remove_credentials_clears_settings(self, mock_delete):
+        """Removing credentials clears the settings singleton values."""
+        from config import settings
+
+        orig_token = settings.IBKR_FLEX_TOKEN
+        orig_qid = settings.IBKR_FLEX_QUERY_ID
+        settings.IBKR_FLEX_TOKEN = "old_token"
+        settings.IBKR_FLEX_QUERY_ID = "old_qid"
+
+        try:
+            remove_credentials("IBKR")
+            assert settings.IBKR_FLEX_TOKEN == ""
+            assert settings.IBKR_FLEX_QUERY_ID == ""
+        finally:
+            settings.IBKR_FLEX_TOKEN = orig_token
+            settings.IBKR_FLEX_QUERY_ID = orig_qid

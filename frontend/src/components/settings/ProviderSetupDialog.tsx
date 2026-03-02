@@ -30,6 +30,7 @@ export function ProviderSetupDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -39,6 +40,7 @@ export function ProviderSetupDialog({
     setValues({});
     setError(null);
     setSuccessMessage(null);
+    setWarnings([]);
     setLoading(true);
 
     providersApi
@@ -62,6 +64,7 @@ export function ProviderSetupDialog({
     try {
       const response = await providersApi.setup(providerName, values);
       setSuccessMessage(response.data.message);
+      setWarnings(response.data.warnings ?? []);
       onSuccess();
     } catch (err) {
       setError(extractApiErrorMessage(err, "Setup failed"));
@@ -87,6 +90,18 @@ export function ProviderSetupDialog({
       {successMessage && (
         <div className="space-y-4">
           <p className="text-tf-positive">{successMessage}</p>
+          {warnings.length > 0 && (
+            <ul className="space-y-1" role="list">
+              {warnings.map((warning, i) => (
+                <li
+                  key={i}
+                  className="text-sm text-amber-500"
+                >
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          )}
           <button
             onClick={onClose}
             className="rounded bg-tf-accent-primary px-4 py-2 text-sm font-medium text-white hover:bg-tf-accent-primary/90"
@@ -110,7 +125,7 @@ export function ProviderSetupDialog({
       )}
 
       {!loading && !successMessage && fields.length > 0 && (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
           {fields.map((field) => (
             <div key={field.key}>
               <label

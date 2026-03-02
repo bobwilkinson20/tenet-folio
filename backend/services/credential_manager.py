@@ -109,11 +109,27 @@ def set_credential(key: str, value: str) -> bool:
 
     try:
         keyring.set_password(SERVICE_NAME, key, value)
-        logger.info("Stored %s in keychain", key)
-        return True
     except Exception:
         logger.warning("Failed to store %s in keychain", key, exc_info=True)
         return False
+
+    # Verify the write — keyring.set_password() can return without error
+    # even when the user declines a macOS Keychain access prompt.
+    try:
+        stored = keyring.get_password(SERVICE_NAME, key)
+    except Exception:
+        logger.warning("Keychain read-back failed for %s", key, exc_info=True)
+        return False
+    if stored != value:
+        logger.warning(
+            "Keychain write verification failed for %s "
+            "(set_password succeeded but value not found on read-back)",
+            key,
+        )
+        return False
+
+    logger.info("Stored %s in keychain", key)
+    return True
 
 
 def delete_credential(key: str) -> bool:

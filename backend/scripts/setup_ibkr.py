@@ -56,7 +56,13 @@ def validate_credentials(token: str, query_id: str) -> bytes:
 
 
 def validate_query_sections(data: bytes) -> list[str]:
-    """Parse a Flex report and return a list of missing required sections.
+    """Check the raw XML for required section elements.
+
+    ibflex represents both "section not configured" and "section configured
+    but empty" as empty tuples after parsing, making them indistinguishable.
+    Instead, we inspect the raw XML for element tags — a configured section
+    always appears as ``<SectionName ...>`` even when it contains no rows
+    (e.g., a paper trading account with no positions).
 
     Args:
         data: Raw XML bytes from a Flex report download.
@@ -65,17 +71,27 @@ def validate_query_sections(data: bytes) -> list[str]:
         List of section names that are missing from the query.
         Empty list means all required sections are present.
     """
-    response = parser.parse(data)
+    # Map XML element tag → human-readable section name
+    required_tags = {
+        b"<OpenPositions": "Open Positions",
+        b"<CashReport": "Cash Report",
+        b"<Trades": "Trades",
+    }
     missing = []
-    for stmt in response.FlexStatements:
-        if not stmt.OpenPositions and "Open Positions" not in missing:
-            missing.append("Open Positions")
-        if not stmt.CashReport and "Cash Report" not in missing:
-            missing.append("Cash Report")
-        if not stmt.Trades and "Trades" not in missing:
-            missing.append("Trades")
+    for tag, name in required_tags.items():
+        if tag not in data:
+            missing.append(name)
     return missing
 
+
+# Minimum columns each required section must include.
+# Keys match the section names returned by validate_query_sections().
+# Values are the IBKR Flex Query column names the user should check.
+REQUIRED_SECTION_COLUMNS: dict[str, list[str]] = {
+    "Open Positions": ["Symbol", "Position", "MarkPrice", "PositionValue", "Currency"],
+    "Cash Report": ["Currency", "EndingCash"],
+    "Trades": ["TradeID", "TradeDate", "Buy/Sell", "NetCash", "IBCommission", "SettleDateTarget"],
+}
 
 # Trades columns required for activity sync (ibflex Trade field names)
 REQUIRED_TRADE_COLUMNS = {"tradeID", "tradeDate"}
@@ -90,6 +106,8 @@ def validate_trade_columns(data: bytes) -> tuple[list[str], list[str]]:
 
     Returns:
         Tuple of (missing_required, missing_recommended) column name lists.
+        Returns ([], []) when no trades exist — column validation is skipped
+        since we can't inspect fields without at least one trade row.
     """
     response = parser.parse(data)
     missing_required = []
@@ -97,8 +115,9 @@ def validate_trade_columns(data: bytes) -> tuple[list[str], list[str]]:
 
     for stmt in response.FlexStatements:
         if not stmt.Trades:
-            # No trades to inspect — can't validate columns
-            return list(REQUIRED_TRADE_COLUMNS), list(RECOMMENDED_TRADE_COLUMNS)
+            # No trades to inspect — can't validate columns.
+            # This is normal for new/paper accounts with no trade history.
+            return [], []
 
         # Inspect the first trade to see which fields are populated
         trade = stmt.Trades[0]

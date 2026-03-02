@@ -25,7 +25,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 0,
     last_sync_time: null,
-    supports_setup: false,
+    supports_setup: true,
   },
   {
     name: "Coinbase",
@@ -205,7 +205,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: "Configure" })).toBeInTheDocument();
+    // Both SimpleFIN and IBKR show Configure (both unconfigured with supports_setup)
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(2);
   });
 
   it("does not show setup buttons for non-setup providers", async () => {
@@ -218,6 +219,8 @@ describe("ProviderList", () => {
     // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
     // Only SimpleFIN should have Reconfigure/Remove, not SnapTrade/Coinbase
     expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(1);
+    // IBKR has supports_setup but no credentials → Configure button
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(1);
   });
 
   it("clicking Remove calls removeCredentials after confirm", async () => {
@@ -294,10 +297,23 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    // Multiple Configure buttons exist (SimpleFIN + IBKR); click the first one (SimpleFIN)
+    const configureButtons = screen.getAllByRole("button", { name: "Configure" });
+    fireEvent.click(configureButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByText("Configure SimpleFIN")).toBeInTheDocument();
     });
+  });
+
+  it("shows Configure button for IBKR with supports_setup", async () => {
+    render(<ProviderList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("IBKR")).toBeInTheDocument();
+    });
+
+    // IBKR has supports_setup=true but no credentials → Configure button
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(1);
   });
 });
