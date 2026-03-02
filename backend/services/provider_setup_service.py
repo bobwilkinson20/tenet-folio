@@ -6,6 +6,7 @@ and stores validated credentials in the macOS Keychain.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from typing import Callable, Literal, TypedDict
 
@@ -274,9 +275,20 @@ def _validate_ibkr(
         validate_trade_columns,
     )
 
-    # Download a test Flex report to validate credentials
+    # Download a test Flex report to validate credentials.
+    # The ibflex download function uses an internal polling loop with no
+    # timeout parameter, so we wrap it in a thread with a timeout to prevent
+    # the request handler from blocking indefinitely.
     try:
-        data = ibflex_client.download(flex_token, flex_query_id)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(ibflex_client.download, flex_token, flex_query_id)
+            data = future.result(timeout=60)
+    except FuturesTimeoutError:
+        logger.warning("IBKR Flex download timed out after 60s")
+        raise ValueError(
+            "IBKR download timed out. The Flex Web Service may be slow or "
+            "unresponsive. Please try again later."
+        )
     except Exception as exc:
         logger.warning("IBKR Flex credential validation failed: %s", exc)
         raise ValueError(
