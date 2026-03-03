@@ -55,6 +55,7 @@ CREDENTIAL_KEYS: frozenset[str] = frozenset(
         "SCHWAB_CALLBACK_URL",
         "PLAID_CLIENT_ID",
         "PLAID_SECRET",
+        "PLAID_ENVIRONMENT",
         "SQLCIPHER_KEY",
     }
 )

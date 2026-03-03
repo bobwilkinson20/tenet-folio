@@ -47,6 +47,16 @@ export function ProviderSetupDialog({
       .getSetupInfo(providerName)
       .then((response) => {
         setFields(response.data);
+        // Pre-populate select fields with first option as default
+        const defaults: Record<string, string> = {};
+        for (const f of response.data) {
+          if (f.input_type === "select" && f.options?.length) {
+            defaults[f.key] = f.options[0].value;
+          }
+        }
+        if (Object.keys(defaults).length > 0) {
+          setValues((prev) => ({ ...defaults, ...prev }));
+        }
       })
       .catch((err) => {
         setError(extractApiErrorMessage(err, "Failed to load setup info"));
@@ -143,6 +153,20 @@ export function ProviderSetupDialog({
                   rows={4}
                   required
                 />
+              ) : field.input_type === "select" ? (
+                <select
+                  id={`setup-${field.key}`}
+                  value={values[field.key] ?? ""}
+                  onChange={(e) => handleFieldChange(field.key, e.target.value)}
+                  className="w-full rounded border border-tf-border-default bg-tf-bg-base px-3 py-2 text-sm text-tf-text-primary focus:border-tf-accent-primary focus:outline-none"
+                  required
+                >
+                  {field.options?.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <input
                   id={`setup-${field.key}`}

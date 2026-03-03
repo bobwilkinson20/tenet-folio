@@ -326,6 +326,62 @@ describe("ProviderSetupDialog", () => {
     expect(textarea.tagName).toBe("TEXTAREA");
   });
 
+  it("renders Plaid form with select field for environment", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "client_id",
+          label: "Client ID",
+          help_text: "Your Plaid client_id",
+          input_type: "password" as const,
+        },
+        {
+          key: "secret",
+          label: "Secret",
+          help_text: "Your Plaid secret",
+          input_type: "password" as const,
+        },
+        {
+          key: "environment",
+          label: "Environment",
+          help_text: "Use sandbox for testing",
+          input_type: "select" as const,
+          options: [
+            { value: "sandbox", label: "Sandbox" },
+            { value: "production", label: "Production" },
+          ],
+        },
+      ],
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="Plaid"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Client ID")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Secret")).toBeInTheDocument();
+    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.getByText("Configure Plaid")).toBeInTheDocument();
+
+    // Environment field should be a select element
+    const select = screen.getByLabelText("Environment");
+    expect(select.tagName).toBe("SELECT");
+
+    // Should have the two options
+    const options = select.querySelectorAll("option");
+    expect(options).toHaveLength(2);
+    expect(options[0].textContent).toBe("Sandbox");
+    expect(options[1].textContent).toBe("Production");
+  });
+
   it("shows success without warnings for clean IBKR setup", async () => {
     mockedGetSetupInfo.mockResolvedValue({
       data: [

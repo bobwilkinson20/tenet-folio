@@ -11,7 +11,8 @@ export interface ProviderSetupField {
   key: string;
   label: string;
   help_text: string;
-  input_type: "text" | "textarea" | "password";
+  input_type: "text" | "textarea" | "password" | "select";
+  options?: { value: string; label: string }[];
 }
 
 export interface ProviderSetupResponse {

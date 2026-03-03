@@ -45,4 +45,5 @@ class ProviderCredentialInfo(BaseModel):
     key: str
     label: str
     help_text: str = ""
-    input_type: Literal["text", "textarea", "password"] = "text"
+    input_type: Literal["text", "textarea", "password", "select"] = "text"
+    options: list[dict[str, str]] = []
