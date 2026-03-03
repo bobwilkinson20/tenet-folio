@@ -71,7 +71,9 @@ def validate(
             "or is invalid."
         ) from exc
 
-    # Look up store_key from fields param.
+    # SimpleFIN stores the exchanged access URL, not the submitted token,
+    # so we can't use the shared store_credentials() helper (which stores
+    # credentials as-is).  Manual storage via set_credential() is required.
     store_key_field = next((f for f in fields if f["key"] == "setup_token"), None)
     if store_key_field is None:
         raise ValueError("No field definition found for setup_token")

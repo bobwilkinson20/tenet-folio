@@ -12,6 +12,9 @@ from .base import ProviderFieldDef, SetupResult, sync_setting
 logger = logging.getLogger(__name__)
 
 # All provider modules registered for in-app setup.
+# Each module must define PROVIDER_NAME, FIELDS, and validate().
+# Accessing these attributes in the comprehensions below guarantees an
+# AttributeError at import time if any are missing — no runtime assertion needed.
 _PROVIDER_MODULES = [simplefin_setup, ibkr_setup, coinbase_setup]
 
 # Maps provider name → list of credential field definitions.

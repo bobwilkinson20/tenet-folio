@@ -326,6 +326,32 @@ class TestValidateAndStore:
                 {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
             )
 
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_invalid_key_format(self, mock_rest_cls):
+        """Invalid key format error is mapped to helpful credential format message."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+        mock_client.get_accounts.side_effect = Exception("invalid api key format")
+
+        with pytest.raises(ValueError, match="Invalid credential format"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "bad-format", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+            )
+
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_generic_error_not_caught_by_invalid_branch(self, mock_rest_cls):
+        """Generic errors with 'invalid' in unrelated context fall through to the generic handler."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+        mock_client.get_accounts.side_effect = Exception("invalid JSON response from server")
+
+        with pytest.raises(ValueError, match="Failed to validate Coinbase credentials"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+            )
+
     @patch("services.provider_setup.base.set_credential", return_value=False)
     @patch("coinbase.rest.RESTClient")
     def test_coinbase_keychain_failure(self, mock_rest_cls, mock_set_cred):

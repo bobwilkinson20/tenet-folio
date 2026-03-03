@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ProviderList } from "../../components/settings/ProviderList";
 
@@ -233,9 +233,9 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // First Remove button is SimpleFIN (rendered before Coinbase)
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    // Scope to SimpleFIN's row to avoid order-dependency
+    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
+    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
 
     expect(window.confirm).toHaveBeenCalledWith("Remove credentials for SimpleFIN?");
     await waitFor(() => {
@@ -252,8 +252,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
+    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
 
     expect(window.confirm).toHaveBeenCalled();
     expect(mockedRemoveCredentials).not.toHaveBeenCalled();
@@ -271,8 +271,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
+    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
       expect(screen.getByText("Keychain unavailable")).toBeInTheDocument();
@@ -301,9 +301,9 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // Multiple Configure buttons exist (SimpleFIN + IBKR); click the first one (SimpleFIN)
-    const configureButtons = screen.getAllByRole("button", { name: "Configure" });
-    fireEvent.click(configureButtons[0]);
+    // Scope to SimpleFIN's row to avoid order-dependency
+    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
+    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Configure" }));
 
     await waitFor(() => {
       expect(screen.getByText("Configure SimpleFIN")).toBeInTheDocument();
