@@ -75,12 +75,12 @@ def validate(
     try:
         future = executor.submit(ibflex_client.download, flex_token, flex_query_id)
         data = future.result(timeout=60)
-    except FuturesTimeoutError:
+    except FuturesTimeoutError as exc:
         logger.warning("IBKR Flex download timed out after 60s")
         raise ValueError(
             "IBKR download timed out. The Flex Web Service may be slow or "
             "unresponsive. Please try again later."
-        )
+        ) from exc
     except Exception as exc:
         logger.warning("IBKR Flex credential validation failed: %s", exc)
         raise ValueError(

@@ -90,7 +90,7 @@ def validate(
                 "Authentication failed: invalid API key or secret. "
                 "Check that your credentials are correct and have not been revoked."
             ) from exc
-        if "invalid api key" in error_msg or "invalid key" in error_msg:
+        if "invalid api key" in error_msg:
             raise ValueError(
                 "Invalid credential format. "
                 "The API key should be in the format organizations/{org_id}/apiKeys/{key_id} "

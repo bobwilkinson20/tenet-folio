@@ -352,6 +352,19 @@ class TestValidateAndStore:
                 {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
             )
 
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_invalid_key_size_falls_through(self, mock_rest_cls):
+        """OpenSSL 'invalid key size' error falls through to generic handler, not credential format."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+        mock_client.get_accounts.side_effect = Exception("invalid key size")
+
+        with pytest.raises(ValueError, match="Failed to validate Coinbase credentials"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntruncated\n-----END EC PRIVATE KEY-----"},
+            )
+
     @patch("services.provider_setup.base.set_credential", return_value=False)
     @patch("coinbase.rest.RESTClient")
     def test_coinbase_keychain_failure(self, mock_rest_cls, mock_set_cred):
