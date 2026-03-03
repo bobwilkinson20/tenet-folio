@@ -50,7 +50,7 @@ def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
             label=f["label"],
             help_text=f["help_text"],
             input_type=f["input_type"],
-            **({"options": f["options"]} if "options" in f else {}),
+            options=f.get("options", []),
         )
         for f in fields
     ]

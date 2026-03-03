@@ -104,7 +104,8 @@ def validate(
             language="en",
         )
         response = api.link_token_create(request)
-        assert response["link_token"], "No link_token in response"
+        if not response.get("link_token"):
+            raise ValueError("No link_token in response from Plaid")
     except Exception as exc:
         error_msg = str(exc)
         if "INVALID_API_KEYS" in error_msg:
