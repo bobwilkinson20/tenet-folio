@@ -33,7 +33,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 1,
     last_sync_time: "2026-01-10T09:00:00Z",
-    supports_setup: false,
+    supports_setup: true,
   },
   {
     name: "Schwab",
@@ -181,16 +181,16 @@ describe("ProviderList", () => {
     });
   });
 
-  it("shows Reconfigure button for configured SimpleFIN", async () => {
+  it("shows Reconfigure button for configured providers with setup support", async () => {
     render(<ProviderList />);
 
     await waitFor(() => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // SimpleFIN has credentials → Reconfigure + Remove
-    expect(screen.getByRole("button", { name: "Reconfigure" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+    // SimpleFIN and Coinbase have credentials + supports_setup → Reconfigure + Remove each
+    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
   });
 
   it("shows Configure button for unconfigured SimpleFIN", async () => {
@@ -217,8 +217,8 @@ describe("ProviderList", () => {
     });
 
     // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
-    // Only SimpleFIN should have Reconfigure/Remove, not SnapTrade/Coinbase
-    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(1);
+    // SimpleFIN and Coinbase have credentials + supports_setup → Reconfigure/Remove
+    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(2);
     // IBKR has supports_setup but no credentials → Configure button
     expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(1);
   });
@@ -233,7 +233,9 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    // First Remove button is SimpleFIN (rendered before Coinbase)
+    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
+    fireEvent.click(removeButtons[0]);
 
     expect(window.confirm).toHaveBeenCalledWith("Remove credentials for SimpleFIN?");
     await waitFor(() => {
@@ -250,7 +252,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
+    fireEvent.click(removeButtons[0]);
 
     expect(window.confirm).toHaveBeenCalled();
     expect(mockedRemoveCredentials).not.toHaveBeenCalled();
@@ -268,7 +271,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
+    fireEvent.click(removeButtons[0]);
 
     await waitFor(() => {
       expect(screen.getByText("Keychain unavailable")).toBeInTheDocument();

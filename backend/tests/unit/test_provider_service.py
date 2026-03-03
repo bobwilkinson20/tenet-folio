@@ -71,6 +71,7 @@ class TestListProviders:
         by_name = {p.name: p for p in result}
         assert by_name["SimpleFIN"].supports_setup is True
         assert by_name["IBKR"].supports_setup is True
+        assert by_name["Coinbase"].supports_setup is True
         assert by_name["SnapTrade"].supports_setup is False
 
     def test_last_sync_time(self, db):

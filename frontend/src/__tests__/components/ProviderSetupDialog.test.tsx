@@ -287,6 +287,45 @@ describe("ProviderSetupDialog", () => {
     expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 
+  it("renders Coinbase form with textarea for API secret", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "api_key",
+          label: "API Key",
+          help_text: "Your CDP API key",
+          input_type: "password" as const,
+        },
+        {
+          key: "api_secret",
+          label: "API Secret",
+          help_text: "Your ECDSA private key in PEM format",
+          input_type: "textarea" as const,
+        },
+      ],
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="Coinbase"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("API Key")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("API Secret")).toBeInTheDocument();
+    expect(screen.getByText("Configure Coinbase")).toBeInTheDocument();
+
+    // API Secret field should be a textarea element
+    const textarea = screen.getByLabelText("API Secret");
+    expect(textarea.tagName).toBe("TEXTAREA");
+  });
+
   it("shows success without warnings for clean IBKR setup", async () => {
     mockedGetSetupInfo.mockResolvedValue({
       data: [

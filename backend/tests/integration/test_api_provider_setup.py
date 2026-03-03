@@ -31,7 +31,7 @@ class TestGetSetupInfo:
 class TestSetupProvider:
     """Tests for POST /api/providers/{name}/setup."""
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.simplefin_setup.set_credential", return_value=True)
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_setup_success(self, mock_get_url, mock_set_cred, client):
         """Successful setup returns provider name and message."""
@@ -79,7 +79,7 @@ class TestSetupProvider:
 class TestRemoveCredentials:
     """Tests for DELETE /api/providers/{name}/credentials."""
 
-    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
     def test_remove_success(self, mock_delete, client):
         """Successful removal returns message."""
         response = client.delete("/api/providers/SimpleFIN/credentials")

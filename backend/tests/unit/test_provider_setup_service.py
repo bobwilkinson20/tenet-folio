@@ -1,6 +1,6 @@
 """Unit tests for the provider setup service."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -35,6 +35,17 @@ class TestGetSetupFields:
         assert fields[1].label == "Flex Query ID"
         assert fields[1].input_type == "text"
 
+    def test_returns_coinbase_fields(self):
+        """Coinbase returns two fields: api_key and api_secret (textarea)."""
+        fields = get_setup_fields("Coinbase")
+        assert len(fields) == 2
+        assert fields[0].key == "api_key"
+        assert fields[0].label == "API Key"
+        assert fields[0].input_type == "password"
+        assert fields[1].key == "api_secret"
+        assert fields[1].label == "API Secret"
+        assert fields[1].input_type == "textarea"
+
     def test_unknown_provider_raises(self):
         """Unknown provider raises ValueError."""
         with pytest.raises(ValueError, match="No setup configuration"):
@@ -50,7 +61,7 @@ class TestGetSetupFields:
 class TestValidateAndStore:
     """Tests for validate_and_store()."""
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.simplefin_setup.set_credential", return_value=True)
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_success(self, mock_get_url, mock_set_cred):
         """Successful SimpleFIN setup exchanges token and stores access URL."""
@@ -102,7 +113,7 @@ class TestValidateAndStore:
         with pytest.raises(ValueError, match="Setup token is required"):
             validate_and_store("SimpleFIN", {})
 
-    @patch("services.provider_setup_service.set_credential", return_value=False)
+    @patch("services.provider_setup.simplefin_setup.set_credential", return_value=False)
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_keychain_failure(self, mock_get_url, mock_set_cred):
         """Keychain storage failure raises RuntimeError."""
@@ -117,7 +128,7 @@ class TestValidateAndStore:
             validate_and_store("UnknownProvider", {"key": "val"})
 
     @patch(
-        "services.provider_setup_service.PROVIDER_CREDENTIAL_MAP",
+        "services.provider_setup.registry.PROVIDER_CREDENTIAL_MAP",
         {"TestProvider": [{"key": "tok", "store_key": "TOK", "label": "Token", "help_text": "", "input_type": "text"}]},
     )
     def test_provider_in_map_but_no_validator_raises(self):
@@ -133,7 +144,7 @@ class TestValidateAndStore:
 
     # --- IBKR tests ---
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.base.set_credential", return_value=True)
     @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
     @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
     @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
@@ -155,7 +166,7 @@ class TestValidateAndStore:
         mock_set_cred.assert_any_call("IBKR_FLEX_TOKEN", "tok123")
         mock_set_cred.assert_any_call("IBKR_FLEX_QUERY_ID", "456")
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.base.set_credential", return_value=True)
     @patch(
         "scripts.setup_ibkr.validate_trade_columns",
         return_value=([], ["buySell", "netCash"]),
@@ -227,10 +238,9 @@ class TestValidateAndStore:
     def test_ibkr_download_timeout(self):
         """Download timeout raises ValueError with timeout message."""
         from concurrent.futures import TimeoutError as FuturesTimeoutError
-        from unittest.mock import MagicMock
 
         with patch(
-            "services.provider_setup_service.ThreadPoolExecutor"
+            "services.provider_setup.ibkr_setup.ThreadPoolExecutor"
         ) as mock_pool_cls:
             mock_executor = MagicMock()
             mock_pool_cls.return_value = mock_executor
@@ -242,7 +252,7 @@ class TestValidateAndStore:
                 )
             mock_executor.shutdown.assert_called_once_with(wait=False)
 
-    @patch("services.provider_setup_service.set_credential")
+    @patch("services.provider_setup.base.set_credential")
     @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
     @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
     @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
@@ -257,11 +267,104 @@ class TestValidateAndStore:
                 "IBKR", {"flex_token": "tok123", "flex_query_id": "456"}
             )
 
+    # --- Coinbase tests ---
+
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_success(self, mock_rest_cls, mock_set_cred):
+        """Successful Coinbase setup validates and stores both credentials."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+
+        result = validate_and_store(
+            "Coinbase",
+            {"api_key": "organizations/org1/apiKeys/key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+        )
+
+        assert isinstance(result, SetupResult)
+        assert "successfully" in result.message.lower()
+        assert result.warnings == []
+        mock_rest_cls.assert_called_once()
+        mock_client.get_accounts.assert_called_once_with(limit=1)
+        assert mock_set_cred.call_count == 2
+        mock_set_cred.assert_any_call("COINBASE_API_KEY", "organizations/org1/apiKeys/key1")
+        mock_set_cred.assert_any_call("COINBASE_API_SECRET", "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----")
+
+    def test_coinbase_empty_api_key(self):
+        """Empty API Key raises ValueError."""
+        with pytest.raises(ValueError, match="API Key is required"):
+            validate_and_store("Coinbase", {"api_key": "", "api_secret": "secret"})
+
+    def test_coinbase_empty_api_secret(self):
+        """Empty API Secret raises ValueError."""
+        with pytest.raises(ValueError, match="API Secret is required"):
+            validate_and_store("Coinbase", {"api_key": "key1", "api_secret": ""})
+
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_ed25519_error(self, mock_rest_cls):
+        """Ed25519 key type error is mapped to helpful ECDSA message."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+        mock_client.get_accounts.side_effect = Exception("Could not deserialize key data")
+
+        with pytest.raises(ValueError, match="ECDSA"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "key1", "api_secret": "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"},
+            )
+
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_auth_failure(self, mock_rest_cls):
+        """Authentication failure is mapped to helpful message."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+        mock_client.get_accounts.side_effect = Exception("401 Unauthorized")
+
+        with pytest.raises(ValueError, match="invalid API key or secret"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+            )
+
+    @patch("services.provider_setup.base.set_credential", return_value=False)
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_keychain_failure(self, mock_rest_cls, mock_set_cred):
+        """Keychain storage failure raises RuntimeError."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+
+        with pytest.raises(RuntimeError, match="Failed to store"):
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "key1", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+            )
+
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_normalizes_pem_newlines(self, mock_rest_cls, mock_set_cred):
+        """Literal \\n in PEM secret is converted to real newlines before storage."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+
+        validate_and_store(
+            "Coinbase",
+            {
+                "api_key": "key1",
+                "api_secret": "-----BEGIN EC PRIVATE KEY-----\\ntest\\n-----END EC PRIVATE KEY-----",
+            },
+        )
+
+        # The stored secret should have real newlines, not literal \n
+        mock_set_cred.assert_any_call(
+            "COINBASE_API_SECRET",
+            "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----",
+        )
+
 
 class TestRemoveCredentials:
     """Tests for remove_credentials()."""
 
-    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
     def test_removes_simplefin_keys(self, mock_delete):
         """Removes SIMPLEFIN_ACCESS_URL from keychain."""
         result = remove_credentials("SimpleFIN")
@@ -269,13 +372,13 @@ class TestRemoveCredentials:
         mock_delete.assert_called_once_with("SIMPLEFIN_ACCESS_URL")
         assert "removed" in result.lower()
 
-    @patch("services.provider_setup_service.delete_credential", return_value=False)
+    @patch("services.provider_setup.registry.delete_credential", return_value=False)
     def test_handles_delete_failure_gracefully(self, mock_delete):
         """Returns 'no credentials' message when key not found in Keychain."""
         result = remove_credentials("SimpleFIN")
         assert "no credentials" in result.lower()
 
-    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
     def test_removes_ibkr_keys(self, mock_delete):
         """Removes IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID from keychain."""
         result = remove_credentials("IBKR")
@@ -283,6 +386,16 @@ class TestRemoveCredentials:
         assert mock_delete.call_count == 2
         mock_delete.assert_any_call("IBKR_FLEX_TOKEN")
         mock_delete.assert_any_call("IBKR_FLEX_QUERY_ID")
+        assert "removed" in result.lower()
+
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
+    def test_removes_coinbase_keys(self, mock_delete):
+        """Removes COINBASE_API_KEY and COINBASE_API_SECRET from keychain."""
+        result = remove_credentials("Coinbase")
+
+        assert mock_delete.call_count == 2
+        mock_delete.assert_any_call("COINBASE_API_KEY")
+        mock_delete.assert_any_call("COINBASE_API_SECRET")
         assert "removed" in result.lower()
 
     def test_unknown_provider_raises(self):
@@ -294,7 +407,7 @@ class TestRemoveCredentials:
 class TestSettingsSync:
     """Tests that validate_and_store / remove_credentials sync the settings singleton."""
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.simplefin_setup.set_credential", return_value=True)
     @patch("simplefin.SimpleFINClient.get_access_url")
     def test_simplefin_setup_updates_settings(self, mock_get_url, mock_set_cred):
         """SimpleFIN setup updates settings.simplefin_access_url in memory."""
@@ -309,7 +422,7 @@ class TestSettingsSync:
         finally:
             settings.SIMPLEFIN_ACCESS_URL = original
 
-    @patch("services.provider_setup_service.set_credential", return_value=True)
+    @patch("services.provider_setup.base.set_credential", return_value=True)
     @patch("scripts.setup_ibkr.validate_trade_columns", return_value=([], []))
     @patch("scripts.setup_ibkr.validate_query_sections", return_value=[])
     @patch("ibflex.client.download", return_value=b"<xml>report</xml>")
@@ -332,7 +445,30 @@ class TestSettingsSync:
             settings.IBKR_FLEX_TOKEN = orig_token
             settings.IBKR_FLEX_QUERY_ID = orig_qid
 
-    @patch("services.provider_setup_service.delete_credential", return_value=True)
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_setup_updates_settings(self, mock_rest_cls, mock_set_cred):
+        """Coinbase setup updates settings.COINBASE_API_KEY and COINBASE_API_SECRET."""
+        from config import settings
+
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+
+        orig_key = settings.COINBASE_API_KEY
+        orig_secret = settings.COINBASE_API_SECRET
+
+        try:
+            validate_and_store(
+                "Coinbase",
+                {"api_key": "newkey", "api_secret": "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"},
+            )
+            assert settings.COINBASE_API_KEY == "newkey"
+            assert settings.COINBASE_API_SECRET == "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----"
+        finally:
+            settings.COINBASE_API_KEY = orig_key
+            settings.COINBASE_API_SECRET = orig_secret
+
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
     def test_remove_credentials_clears_settings(self, mock_delete):
         """Removing credentials clears the settings singleton values."""
         from config import settings
