@@ -77,6 +77,8 @@ def validate(
         client.get_accounts(limit=1)
     except Exception as exc:
         error_msg = str(exc).lower()
+        # The Coinbase SDK raises "Could not deserialize key data" when
+        # an Ed25519 PEM is passed (via cryptography lib's load_pem_private_key).
         if "ed25519" in error_msg or "deserialize" in error_msg:
             raise ValueError(
                 "Authentication failed: your API key appears to use Ed25519. "
