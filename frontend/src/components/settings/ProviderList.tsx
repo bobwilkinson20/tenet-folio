@@ -110,6 +110,7 @@ export function ProviderList() {
         {providers.map((provider) => (
           <div
             key={provider.name}
+            data-testid={`provider-row-${provider.name}`}
             className="flex items-start gap-4 rounded-lg border border-tf-border-default p-4"
           >
             <label className="relative mt-1 inline-flex cursor-pointer items-center shrink-0">
