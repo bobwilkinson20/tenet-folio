@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 PROVIDER_NAME = "Plaid"
 
+# Validated before the plaid import attempt to fail fast on bad input.
+# Must match the keys of env_map defined inside validate().
 _VALID_ENVIRONMENTS = {"sandbox", "production"}
 
 FIELDS: list[ProviderFieldDef] = [
@@ -103,9 +105,8 @@ def validate(
             country_codes=[CountryCode("US")],
             language="en",
         )
-        response = api.link_token_create(request)
-        if not response.get("link_token"):
-            raise ValueError("No link_token in response from Plaid")
+        # link_token presence is guaranteed on success; exceptions handle failures
+        api.link_token_create(request)
     except Exception as exc:
         error_msg = str(exc)
         if "INVALID_API_KEYS" in error_msg:
