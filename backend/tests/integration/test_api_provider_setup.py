@@ -17,6 +17,20 @@ class TestGetSetupInfo:
         assert data[0]["label"] == "Setup Token"
         assert data[0]["input_type"] == "password"
 
+    def test_returns_plaid_fields(self, client):
+        """Returns field definitions for Plaid with select type."""
+        response = client.get("/api/providers/Plaid/setup-info")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data) == 3
+        assert data[0]["key"] == "client_id"
+        assert data[1]["key"] == "secret"
+        assert data[2]["key"] == "environment"
+        assert data[2]["input_type"] == "select"
+        assert len(data[2]["options"]) == 2
+        assert data[2]["options"][0]["value"] == "sandbox"
+
     def test_unknown_provider_404(self, client):
         """Unknown provider returns 404."""
         response = client.get("/api/providers/FakeProvider/setup-info")
@@ -30,6 +44,22 @@ class TestGetSetupInfo:
 
 class TestSetupProvider:
     """Tests for POST /api/providers/{name}/setup."""
+
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_setup_success(self, mock_link_create, mock_set_cred, client):
+        """Successful Plaid setup returns provider name and message."""
+        mock_link_create.return_value = {"link_token": "link-sandbox-test"}
+
+        response = client.post(
+            "/api/providers/Plaid/setup",
+            json={"credentials": {"client_id": "abc123", "secret": "def456", "environment": "sandbox"}},
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["provider"] == "Plaid"
+        assert "successfully" in data["message"].lower()
 
     @patch("services.provider_setup.simplefin_setup.set_credential", return_value=True)
     @patch("simplefin.SimpleFINClient.get_access_url")

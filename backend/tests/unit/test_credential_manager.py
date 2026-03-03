@@ -189,6 +189,7 @@ class TestCredentialKeys:
             "SCHWAB_CALLBACK_URL",
             "PLAID_CLIENT_ID",
             "PLAID_SECRET",
+            "PLAID_ENVIRONMENT",
             "SQLCIPHER_KEY",
         }
         assert CREDENTIAL_KEYS == expected

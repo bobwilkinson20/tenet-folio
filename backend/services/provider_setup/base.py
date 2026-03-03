@@ -18,14 +18,20 @@ class SetupResult:
     warnings: list[str] = field(default_factory=list)
 
 
-class ProviderFieldDef(TypedDict):
-    """Type-safe definition for a provider credential field."""
+class _ProviderFieldDefRequired(TypedDict):
+    """Required keys for a provider credential field."""
 
     key: str
     label: str
     help_text: str
-    input_type: Literal["text", "textarea", "password"]
+    input_type: Literal["text", "textarea", "password", "select"]
     store_key: str
+
+
+class ProviderFieldDef(_ProviderFieldDefRequired, total=False):
+    """Type-safe definition for a provider credential field."""
+
+    options: list[dict[str, str]]
 
 
 def sync_setting(store_key: str, value: str) -> None:

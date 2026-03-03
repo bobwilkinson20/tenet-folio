@@ -420,6 +420,116 @@ class TestValidateAndStore:
         )
 
 
+    # --- Plaid tests ---
+
+    def test_returns_plaid_fields(self):
+        """Plaid returns three fields: client_id, secret, and environment (select)."""
+        fields = get_setup_fields("Plaid")
+        assert len(fields) == 3
+        assert fields[0].key == "client_id"
+        assert fields[0].label == "Client ID"
+        assert fields[0].input_type == "password"
+        assert fields[1].key == "secret"
+        assert fields[1].label == "Secret"
+        assert fields[1].input_type == "password"
+        assert fields[2].key == "environment"
+        assert fields[2].label == "Environment"
+        assert fields[2].input_type == "select"
+        assert len(fields[2].options) == 2
+        assert fields[2].options[0]["value"] == "sandbox"
+        assert fields[2].options[1]["value"] == "production"
+
+
+class TestValidateAndStorePlaid:
+    """Tests for Plaid validate_and_store()."""
+
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_success(self, mock_link_create, mock_set_cred):
+        """Successful Plaid setup validates and stores all three credentials."""
+        mock_link_create.return_value = {"link_token": "link-sandbox-test"}
+
+        result = validate_and_store(
+            "Plaid",
+            {"client_id": "abc123", "secret": "def456", "environment": "sandbox"},
+        )
+
+        assert isinstance(result, SetupResult)
+        assert "successfully" in result.message.lower()
+        assert result.warnings == []
+        assert mock_set_cred.call_count == 3
+        mock_set_cred.assert_any_call("PLAID_CLIENT_ID", "abc123")
+        mock_set_cred.assert_any_call("PLAID_SECRET", "def456")
+        mock_set_cred.assert_any_call("PLAID_ENVIRONMENT", "sandbox")
+
+    def test_plaid_empty_client_id(self):
+        """Empty Client ID raises ValueError."""
+        with pytest.raises(ValueError, match="Client ID is required"):
+            validate_and_store(
+                "Plaid", {"client_id": "", "secret": "def456", "environment": "sandbox"}
+            )
+
+    def test_plaid_empty_secret(self):
+        """Empty Secret raises ValueError."""
+        with pytest.raises(ValueError, match="Secret is required"):
+            validate_and_store(
+                "Plaid", {"client_id": "abc123", "secret": "", "environment": "sandbox"}
+            )
+
+    def test_plaid_invalid_environment(self):
+        """Invalid environment value raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid environment"):
+            validate_and_store(
+                "Plaid",
+                {"client_id": "abc123", "secret": "def456", "environment": "development"},
+            )
+
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_invalid_credentials(self, mock_link_create):
+        """API error raises ValueError with actionable message."""
+        mock_link_create.side_effect = Exception("Connection failed")
+
+        with pytest.raises(ValueError, match="Failed to validate Plaid credentials"):
+            validate_and_store(
+                "Plaid",
+                {"client_id": "bad", "secret": "bad", "environment": "sandbox"},
+            )
+
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_invalid_api_keys_env_hint(self, mock_link_create):
+        """INVALID_API_KEYS error suggests environment mismatch."""
+        mock_link_create.side_effect = Exception(
+            "INVALID_API_KEYS: the client_id or secret is invalid"
+        )
+
+        with pytest.raises(ValueError, match="environment matches your keys"):
+            validate_and_store(
+                "Plaid",
+                {"client_id": "abc123", "secret": "def456", "environment": "sandbox"},
+            )
+
+    @patch("services.provider_setup.base.set_credential", return_value=False)
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_keychain_failure(self, mock_link_create, mock_set_cred):
+        """Keychain storage failure raises RuntimeError."""
+        mock_link_create.return_value = {"link_token": "link-sandbox-test"}
+
+        with pytest.raises(RuntimeError, match="Failed to store"):
+            validate_and_store(
+                "Plaid",
+                {"client_id": "abc123", "secret": "def456", "environment": "sandbox"},
+            )
+
+    @patch.dict("sys.modules", {"plaid": None})
+    def test_plaid_library_not_installed(self):
+        """Missing plaid library raises RuntimeError with helpful message."""
+        with pytest.raises(RuntimeError, match="Plaid library is not installed"):
+            validate_and_store(
+                "Plaid",
+                {"client_id": "abc123", "secret": "def456", "environment": "sandbox"},
+            )
+
+
 class TestRemoveCredentials:
     """Tests for remove_credentials()."""
 
@@ -455,6 +565,17 @@ class TestRemoveCredentials:
         assert mock_delete.call_count == 2
         mock_delete.assert_any_call("COINBASE_API_KEY")
         mock_delete.assert_any_call("COINBASE_API_SECRET")
+        assert "removed" in result.lower()
+
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
+    def test_removes_plaid_keys(self, mock_delete):
+        """Removes PLAID_CLIENT_ID, PLAID_SECRET, and PLAID_ENVIRONMENT from keychain."""
+        result = remove_credentials("Plaid")
+
+        assert mock_delete.call_count == 3
+        mock_delete.assert_any_call("PLAID_CLIENT_ID")
+        mock_delete.assert_any_call("PLAID_SECRET")
+        mock_delete.assert_any_call("PLAID_ENVIRONMENT")
         assert "removed" in result.lower()
 
     def test_unknown_provider_raises(self):
@@ -526,6 +647,31 @@ class TestSettingsSync:
         finally:
             settings.COINBASE_API_KEY = orig_key
             settings.COINBASE_API_SECRET = orig_secret
+
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("plaid.api.plaid_api.PlaidApi.link_token_create")
+    def test_plaid_setup_updates_settings(self, mock_link_create, mock_set_cred):
+        """Plaid setup updates settings for all three keys."""
+        from config import settings
+
+        mock_link_create.return_value = {"link_token": "link-sandbox-test"}
+
+        orig_client_id = settings.PLAID_CLIENT_ID
+        orig_secret = settings.PLAID_SECRET
+        orig_env = settings.PLAID_ENVIRONMENT
+
+        try:
+            validate_and_store(
+                "Plaid",
+                {"client_id": "newclient", "secret": "newsecret", "environment": "production"},
+            )
+            assert settings.PLAID_CLIENT_ID == "newclient"
+            assert settings.PLAID_SECRET == "newsecret"
+            assert settings.PLAID_ENVIRONMENT == "production"
+        finally:
+            settings.PLAID_CLIENT_ID = orig_client_id
+            settings.PLAID_SECRET = orig_secret
+            settings.PLAID_ENVIRONMENT = orig_env
 
     @patch("services.provider_setup.registry.delete_credential", return_value=True)
     def test_remove_credentials_clears_settings(self, mock_delete):
