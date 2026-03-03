@@ -38,10 +38,10 @@ def _normalize_pem(secret: str) -> str:
     """Normalize a PEM key string for storage.
 
     Converts literal ``\\n`` sequences (common copy-paste artifact from
-    .env files or web UIs) to real newlines, and strips surrounding
-    whitespace.
+    .env files or web UIs) to real newlines, normalizes Windows CRLF
+    line endings, and strips surrounding whitespace.
     """
-    return secret.replace("\\n", "\n").strip()
+    return secret.replace("\\n", "\n").replace("\r\n", "\n").strip()
 
 
 def validate(

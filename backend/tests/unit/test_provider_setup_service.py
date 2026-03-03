@@ -386,6 +386,26 @@ class TestValidateAndStore:
             "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----",
         )
 
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("coinbase.rest.RESTClient")
+    def test_coinbase_normalizes_crlf_line_endings(self, mock_rest_cls, mock_set_cred):
+        """Windows CRLF line endings in PEM secret are normalized to LF."""
+        mock_client = MagicMock()
+        mock_rest_cls.return_value = mock_client
+
+        validate_and_store(
+            "Coinbase",
+            {
+                "api_key": "key1",
+                "api_secret": "-----BEGIN EC PRIVATE KEY-----\r\ntest\r\n-----END EC PRIVATE KEY-----",
+            },
+        )
+
+        mock_set_cred.assert_any_call(
+            "COINBASE_API_SECRET",
+            "-----BEGIN EC PRIVATE KEY-----\ntest\n-----END EC PRIVATE KEY-----",
+        )
+
 
 class TestRemoveCredentials:
     """Tests for remove_credentials()."""

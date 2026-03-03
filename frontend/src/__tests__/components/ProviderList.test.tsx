@@ -233,9 +233,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // Scope to SimpleFIN's row to avoid order-dependency
-    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
-    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
+    const simplefinRow = screen.getByTestId("provider-row-SimpleFIN");
+    fireEvent.click(within(simplefinRow).getByRole("button", { name: "Remove" }));
 
     expect(window.confirm).toHaveBeenCalledWith("Remove credentials for SimpleFIN?");
     await waitFor(() => {
@@ -252,8 +251,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
-    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
+    const simplefinRow = screen.getByTestId("provider-row-SimpleFIN");
+    fireEvent.click(within(simplefinRow).getByRole("button", { name: "Remove" }));
 
     expect(window.confirm).toHaveBeenCalled();
     expect(mockedRemoveCredentials).not.toHaveBeenCalled();
@@ -271,8 +270,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
-    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Remove" }));
+    const simplefinRow = screen.getByTestId("provider-row-SimpleFIN");
+    fireEvent.click(within(simplefinRow).getByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
       expect(screen.getByText("Keychain unavailable")).toBeInTheDocument();
@@ -301,9 +300,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // Scope to SimpleFIN's row to avoid order-dependency
-    const simplefinRow = screen.getByText("SimpleFIN").closest("div.flex.items-start")!;
-    fireEvent.click(within(simplefinRow as HTMLElement).getByRole("button", { name: "Configure" }));
+    const simplefinRow = screen.getByTestId("provider-row-SimpleFIN");
+    fireEvent.click(within(simplefinRow).getByRole("button", { name: "Configure" }));
 
     await waitFor(() => {
       expect(screen.getByText("Configure SimpleFIN")).toBeInTheDocument();
