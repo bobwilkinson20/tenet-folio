@@ -42,6 +42,22 @@ Profile names must match `[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?` (no leading or
 
 Without `TENET_PROFILE`, everything behaves as before (service name `tenet-folio`, database `portfolio.db`, default ports, no badge).
 
+## HTTPS (Local TLS)
+
+The Schwab OAuth callback requires HTTPS. Running `make certs` generates locally-trusted TLS certificates via [mkcert](https://github.com/FiloSottile/mkcert), enabling the backend to serve HTTPS so the OAuth redirect lands directly on `/api/schwab/callback` — no manual URL paste needed.
+
+```bash
+brew install mkcert        # one-time
+mkcert -install            # trust the local CA (one-time, may prompt for password)
+make certs                 # generate certs in .certs/
+make dev                   # backend now starts with HTTPS
+```
+
+- **Certs location:** `.certs/cert.pem` and `.certs/key.pem` (gitignored)
+- **Backward-compatible:** If `.certs/` is absent, `make dev` runs plain HTTP as before
+- **Frontend stays HTTP:** An HTTP page calling an HTTPS API is fine (no mixed-content issue)
+- **Per-profile callback URLs:** The default `SCHWAB_CALLBACK_URL` uses port 8000. For profiles on other ports (e.g., `dev-paper` on 8001), set `SCHWAB_CALLBACK_URL=https://127.0.0.1:8001/api/schwab/callback` in the provider's Schwab credentials
+
 ## Common Commands
 
 A root-level `Makefile` provides shortcuts for the most common operations:
@@ -54,6 +70,7 @@ make lint                               # Ruff check + ESLint + type-check
 make format                             # Auto-format backend code
 make migrate                            # Apply pending Alembic migrations
 make migration msg="description"        # Create a new migration
+make certs                              # Generate local TLS certs (one-time)
 make dev-paper                          # Profile=paper on ports 8001/5174
 make dev-test                           # Profile=test on ports 8002/5175
 ```

@@ -14,6 +14,7 @@ import { AllocationFilterToggle } from "../components/dashboard/AllocationFilter
 import { NetWorthChart } from "../components/dashboard/NetWorthChart";
 import { UnassignedAlert } from "../components/dashboard/UnassignedAlert";
 import { ValuationWarning } from "../components/dashboard/ValuationWarning";
+import { SchwabTokenWarning } from "../components/dashboard/SchwabTokenWarning";
 import { CostBasisCard } from "../components/dashboard/CostBasisCard";
 import { ReturnsCard } from "../components/dashboard/ReturnsCard";
 import { formatCurrency } from "@/utils/format";
@@ -162,6 +163,7 @@ export function DashboardPage() {
         <div className="flex-1 min-w-0 space-y-6">
           {/* Valuation Warning Banner */}
           {dashboard && <ValuationWarning accounts={dashboard.accounts} />}
+          <SchwabTokenWarning />
 
           {/* Net Worth Card */}
           <div className="bg-tf-bg-surface border border-tf-border-subtle rounded-xl p-6">

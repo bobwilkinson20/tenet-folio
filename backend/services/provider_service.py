@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from config import settings as app_settings
 from integrations.provider_registry import ALL_PROVIDER_NAMES, ProviderRegistry  # noqa: F401 (re-exported)
 from models import Account
 from models.provider_setting import ProviderSetting
@@ -59,6 +60,13 @@ class ProviderService:
         for name in ALL_PROVIDER_NAMES:
             setting = settings_map.get(name)
             has_credentials = registry.is_configured(name) if registry else False
+            # Schwab's is_configured() requires the token file to exist,
+            # but after in-app setup (before OAuth) only the app key/secret
+            # are stored.  Show as configured so the OAuth step is reachable.
+            if name == "Schwab" and not has_credentials:
+                has_credentials = bool(
+                    app_settings.SCHWAB_APP_KEY and app_settings.SCHWAB_APP_SECRET
+                )
             is_enabled = setting.is_enabled if setting else True  # No row = enabled
 
             result.append(
