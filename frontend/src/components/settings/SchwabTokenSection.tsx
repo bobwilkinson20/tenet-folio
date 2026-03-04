@@ -28,11 +28,21 @@ export function SchwabTokenSection() {
     fetchStatus();
   }, [fetchStatus]);
 
-  // Poll token status while the paste flow is visible (callback may complete it)
+  // Poll token status while the paste flow is visible (callback may complete it).
+  // Stop after 10 minutes to match the backend auth-context TTL.
   useEffect(() => {
     if (!showPasteFlow) return;
 
+    const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+
     const interval = setInterval(async () => {
+      if (Date.now() > deadline) {
+        clearInterval(interval);
+        setError("Authorization timed out. Please try again.");
+        setShowPasteFlow(false);
+        return;
+      }
       try {
         const response = await schwabApi.getTokenStatus();
         if (response.data.status === "valid") {

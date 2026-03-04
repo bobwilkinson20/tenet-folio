@@ -46,7 +46,7 @@ def _make_token_writer():
     """Return a ``token_write_func`` for schwab-py that persists to disk."""
     token_path = settings.SCHWAB_TOKEN_PATH
 
-    def _write(token_data, _=None):
+    def _write(token_data, _prev_token=None):  # schwab-py passes previous token as 2nd arg
         p = Path(token_path)
         p.write_text(json.dumps(token_data, indent=2))
         p.chmod(0o600)
@@ -218,6 +218,8 @@ def get_token_status():
     age_seconds = time.time() - creation_ts
     age_days = age_seconds / 86400.0
 
+    # Schwab refresh tokens expire after ~7 days (per developer.schwab.com).
+    # Warn at 5 days, treat as expired at 6.5 days.
     if age_days > 6.5:
         return TokenStatusResponse(
             status="expired",
