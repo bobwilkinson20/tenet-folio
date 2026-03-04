@@ -618,6 +618,10 @@ class SyncService:
         else:
             remote_holdings = provider.get_holdings()
 
+        # Flush provider-specific item error state (e.g., Plaid ITEM_LOGIN_REQUIRED)
+        if hasattr(provider, "flush_item_errors"):
+            provider.flush_item_errors(db)
+
         # Upsert accounts from provider data
         if sync_result and sync_result.accounts:
             self._upsert_accounts(db, provider_name, sync_result.accounts)

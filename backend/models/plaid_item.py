@@ -27,4 +27,6 @@ class PlaidItem(Base):
     access_token = Column(String, nullable=False)
     institution_id = Column(String, nullable=True)
     institution_name = Column(String, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

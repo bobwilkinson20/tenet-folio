@@ -19,6 +19,8 @@ vi.mock("../../api/plaid", () => ({
     exchangeToken: vi.fn(),
     listItems: vi.fn(),
     removeItem: vi.fn(),
+    createUpdateLinkToken: vi.fn(),
+    clearItemError: vi.fn(),
   },
 }));
 
@@ -33,6 +35,8 @@ const sampleItems = [
     item_id: "item-1",
     institution_id: "ins_1",
     institution_name: "Chase",
+    error_code: null,
+    error_message: null,
     created_at: "2026-01-15T10:00:00Z",
   },
   {
@@ -40,6 +44,8 @@ const sampleItems = [
     item_id: "item-2",
     institution_id: "ins_2",
     institution_name: "Vanguard",
+    error_code: null,
+    error_message: null,
     created_at: "2026-01-20T12:00:00Z",
   },
 ];
@@ -111,5 +117,36 @@ describe("PlaidItemList", () => {
     await waitFor(() => {
       expect(screen.getByText("Link Institution")).toBeInTheDocument();
     });
+  });
+
+  it("shows error message for errored items", async () => {
+    const itemsWithError = [
+      {
+        ...sampleItems[0],
+        error_code: "ITEM_LOGIN_REQUIRED",
+        error_message: "Login required for Chase",
+      },
+      sampleItems[1],
+    ];
+    mockedListItems.mockResolvedValue({ data: itemsWithError } as never);
+
+    render(<PlaidItemList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Chase")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Login required for Chase")).toBeInTheDocument();
+  });
+
+  it("shows Update button for all items", async () => {
+    render(<PlaidItemList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Chase")).toBeInTheDocument();
+    });
+
+    const updateButtons = screen.getAllByText("Update");
+    expect(updateButtons).toHaveLength(2);
   });
 });

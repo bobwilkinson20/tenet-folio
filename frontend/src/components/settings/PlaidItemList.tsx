@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { plaidApi } from "@/api/plaid";
 import type { PlaidItem } from "@/api/plaid";
 import { PlaidLinkButton } from "./PlaidLinkButton";
+import { PlaidUpdateButton } from "./PlaidUpdateButton";
 
 export function PlaidItemList() {
   const [items, setItems] = useState<PlaidItem[]>([]);
@@ -75,16 +76,29 @@ export function PlaidItemList() {
               key={item.item_id}
               className="flex items-center justify-between rounded border border-tf-border-default px-3 py-2 text-sm"
             >
-              <span className="text-tf-text-primary">
-                {item.institution_name || item.item_id}
-              </span>
-              <button
-                onClick={() => handleRemove(item.item_id, item.institution_name || item.item_id)}
-                disabled={removingId === item.item_id}
-                className="text-xs text-tf-negative hover:underline disabled:opacity-50"
-              >
-                {removingId === item.item_id ? "Removing..." : "Remove"}
-              </button>
+              <div className="flex flex-col">
+                <span className="text-tf-text-primary">
+                  {item.institution_name || item.item_id}
+                </span>
+                {item.error_code && (
+                  <span className="text-xs text-tf-negative">
+                    {item.error_message || item.error_code}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <PlaidUpdateButton
+                  itemId={item.item_id}
+                  onSuccess={fetchItems}
+                />
+                <button
+                  onClick={() => handleRemove(item.item_id, item.institution_name || item.item_id)}
+                  disabled={removingId === item.item_id}
+                  className="text-xs text-tf-negative hover:underline disabled:opacity-50"
+                >
+                  {removingId === item.item_id ? "Removing..." : "Remove"}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
