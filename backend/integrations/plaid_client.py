@@ -9,11 +9,17 @@ The sync_all() method loads access tokens from the PlaidItem DB table
 internally, keeping the sync service free of provider-specific logic.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from plaid import ApiException, Environment
 from plaid.api.plaid_api import PlaidApi
@@ -336,7 +342,7 @@ class PlaidClient:
         finally:
             db.close()
 
-    def flush_item_errors(self, db) -> None:
+    def flush_item_errors(self, db: "Session") -> None:
         """Persist pending PlaidItem error state using the caller's DB session.
 
         Must be called after ``sync_all()`` with a session that is safe
