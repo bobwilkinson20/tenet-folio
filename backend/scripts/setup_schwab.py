@@ -165,7 +165,7 @@ def main():
             print("Error: No App Secret provided")
             sys.exit(1)
 
-    default_callback = stored_callback or "https://127.0.0.1"
+    default_callback = stored_callback or "https://127.0.0.1:8000/api/schwab/callback"
     callback_url = input(
         f"Enter Callback URL (default: {default_callback}): "
     ).strip()

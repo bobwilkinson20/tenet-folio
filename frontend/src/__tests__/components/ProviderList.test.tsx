@@ -41,7 +41,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 0,
     last_sync_time: null,
-    supports_setup: false,
+    supports_setup: true,
   },
 ];
 
@@ -52,6 +52,16 @@ vi.mock("../../api", () => ({
     getSetupInfo: vi.fn(),
     setup: vi.fn(),
     removeCredentials: vi.fn(),
+  },
+}));
+
+vi.mock("../../api/schwab", () => ({
+  schwabApi: {
+    getTokenStatus: vi.fn().mockResolvedValue({
+      data: { status: "no_credentials", message: "", expires_at: null, days_remaining: null },
+    }),
+    createAuthUrl: vi.fn(),
+    exchangeToken: vi.fn(),
   },
 }));
 
@@ -116,8 +126,9 @@ describe("ProviderList", () => {
     });
 
     const toggles = screen.getAllByRole("checkbox");
-    // IBKR (index 2) and Schwab (index 4) should be disabled
+    // IBKR (index 2) should be disabled (no credentials)
     expect(toggles[2]).toBeDisabled();
+    // Schwab (index 4) should be disabled (no credentials)
     expect(toggles[4]).toBeDisabled();
     // SnapTrade (index 0) should be enabled
     expect(toggles[0]).not.toBeDisabled();
@@ -205,8 +216,8 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // Both SimpleFIN and IBKR show Configure (both unconfigured with supports_setup)
-    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(2);
+    // SimpleFIN, IBKR, and Schwab show Configure (all unconfigured with supports_setup)
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(3);
   });
 
   it("does not show setup buttons for non-setup providers", async () => {
@@ -219,8 +230,8 @@ describe("ProviderList", () => {
     // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
     // SimpleFIN and Coinbase have credentials + supports_setup → Reconfigure/Remove
     expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(2);
-    // IBKR has supports_setup but no credentials → Configure button
-    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(1);
+    // IBKR and Schwab have supports_setup but no credentials → Configure button
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(2);
   });
 
   it("clicking Remove calls removeCredentials after confirm", async () => {
@@ -315,7 +326,7 @@ describe("ProviderList", () => {
       expect(screen.getByText("IBKR")).toBeInTheDocument();
     });
 
-    // IBKR has supports_setup=true but no credentials → Configure button
-    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(1);
+    // IBKR and Schwab both have supports_setup=true but no credentials → Configure button
+    expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(2);
   });
 });

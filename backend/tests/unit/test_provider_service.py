@@ -1,5 +1,7 @@
 """Tests for ProviderService."""
 
+from unittest.mock import patch
+
 import pytest
 
 from models import Account
@@ -24,8 +26,11 @@ class TestListProviders:
         for p in result:
             assert p.is_enabled is True
 
-    def test_has_credentials_without_registry(self, db):
+    @patch("services.provider_service.app_settings")
+    def test_has_credentials_without_registry(self, mock_settings, db):
         """Without a registry, all has_credentials are False."""
+        mock_settings.SCHWAB_APP_KEY = ""
+        mock_settings.SCHWAB_APP_SECRET = ""
         result = ProviderService.list_providers(db)
         for p in result:
             assert p.has_credentials is False

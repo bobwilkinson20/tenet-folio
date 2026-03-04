@@ -174,7 +174,7 @@ class TestMainFlow:
         mock_oauth.assert_called_once()
         args, kwargs = mock_oauth.call_args
         # callback_url is the 3rd positional arg
-        assert args[2] == "https://127.0.0.1"
+        assert args[2] == "https://127.0.0.1:8000/api/schwab/callback"
 
     @patch("scripts.setup_schwab.validate_client")
     @patch("scripts.setup_schwab.run_oauth_flow")
