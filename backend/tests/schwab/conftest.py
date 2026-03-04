@@ -41,7 +41,7 @@ def schwab_client(load_test_env) -> SchwabClient:
     if not get_credential("SCHWAB_TOKEN"):
         pytest.skip(
             "Schwab token not found in Keychain: "
-            "run setup_schwab.py or migrate_schwab_token.py first"
+            "run setup_schwab.py first"
         )
 
     return SchwabClient(

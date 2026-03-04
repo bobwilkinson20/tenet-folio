@@ -76,6 +76,10 @@ def run_oauth_flow(
     Returns:
         An authenticated schwab-py client.
     """
+    # HACK: schwab-py requires token_path even when token_write_func is
+    # provided.  When token_write_func is set, schwab-py delegates all
+    # writes to the callback and never touches token_path, so the sentinel
+    # value is safe.  See schwab-py source: auth.py::client_from_manual_flow.
     return client_from_manual_flow(
         api_key=app_key,
         app_secret=app_secret,

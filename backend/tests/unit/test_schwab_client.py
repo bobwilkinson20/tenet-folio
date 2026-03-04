@@ -12,6 +12,8 @@ from integrations.schwab_client import (
     SELL_SUB_TYPES,
     TRANSACTION_TYPE_MAP,
     SchwabClient,
+    read_token_from_keychain,
+    write_token_to_keychain,
 )
 
 
@@ -148,6 +150,53 @@ def _make_response(status_code=200, json_data=None):
 # ---------------------------------------------------------------------------
 # Protocol Tests
 # ---------------------------------------------------------------------------
+
+
+class TestReadTokenFromKeychain:
+    """Tests for the read_token_from_keychain helper."""
+
+    @patch("integrations.schwab_client.get_credential", return_value=None)
+    def test_returns_none_when_no_credential(self, _mock):
+        assert read_token_from_keychain() is None
+
+    @patch(
+        "integrations.schwab_client.get_credential",
+        return_value='{"access_token": "abc", "refresh_token": "def"}',
+    )
+    def test_returns_parsed_token(self, _mock):
+        result = read_token_from_keychain()
+        assert result == {"access_token": "abc", "refresh_token": "def"}
+
+    @patch("integrations.schwab_client.get_credential", return_value="not-json{")
+    def test_returns_none_on_invalid_json(self, _mock, caplog):
+        result = read_token_from_keychain()
+        assert result is None
+        assert "Failed to parse SCHWAB_TOKEN" in caplog.text
+
+
+class TestWriteTokenToKeychain:
+    """Tests for the write_token_to_keychain helper."""
+
+    @patch("integrations.schwab_client.set_credential", return_value=True)
+    def test_logs_success(self, _mock, caplog):
+        write_token_to_keychain({"access_token": "abc"})
+        assert "Schwab token written to Keychain" in caplog.text
+
+    @patch("integrations.schwab_client.set_credential", return_value=False)
+    def test_logs_error_on_failure(self, _mock, caplog):
+        write_token_to_keychain({"access_token": "abc"})
+        assert "Failed to write Schwab token to Keychain" in caplog.text
+
+    @patch("integrations.schwab_client.set_credential", return_value=True)
+    def test_ignores_extra_args_kwargs(self, mock_set):
+        """authlib passes extra kwargs like refresh_token during refresh."""
+        write_token_to_keychain(
+            {"access_token": "abc"},
+            "old_token",
+            refresh_token="xyz",
+            old_token={"access_token": "old"},
+        )
+        mock_set.assert_called_once()
 
 
 class TestSchwabClientProtocol:

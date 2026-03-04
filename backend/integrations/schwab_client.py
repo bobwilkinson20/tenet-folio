@@ -94,6 +94,9 @@ def write_token_to_keychain(token_data, *args, **kwargs):
     if set_credential("SCHWAB_TOKEN", raw):
         logger.info("Schwab token written to Keychain")
     else:
+        # schwab-py does not inspect the return value of the write callback,
+        # so we cannot propagate the failure.  Log the error so the user
+        # sees it in the console; the next startup will require re-auth.
         logger.error("Failed to write Schwab token to Keychain")
 
 

@@ -106,7 +106,9 @@ def remove_credentials(provider_name: str) -> str:
         else:
             logger.info("Credential %s not found in Keychain for %s", key, provider_name)
 
-    # Schwab also stores an OAuth token in Keychain
+    # Schwab also stores an OAuth token in Keychain under SCHWAB_TOKEN.
+    # This key is not in provider_credentials (it's written by the OAuth
+    # callback, not the setup form), so it must be cleaned up separately.
     if provider_name == "Schwab":
         if delete_credential("SCHWAB_TOKEN"):
             logger.info("Removed SCHWAB_TOKEN for %s", provider_name)
