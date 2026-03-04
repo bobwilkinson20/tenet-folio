@@ -17,7 +17,7 @@ export function PlaidUpdateButton({ itemId, onSuccess }: PlaidUpdateButtonProps)
   const [error, setError] = useState<string | null>(null);
   const hasOpened = useRef(false);
 
-  const fetchUpdateToken = async () => {
+  const fetchUpdateToken = useCallback(async () => {
     setLoading(true);
     setError(null);
     hasOpened.current = false;
@@ -29,7 +29,7 @@ export function PlaidUpdateButton({ itemId, onSuccess }: PlaidUpdateButtonProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [itemId]);
 
   const handlePlaidSuccess = useCallback(async () => {
     try {

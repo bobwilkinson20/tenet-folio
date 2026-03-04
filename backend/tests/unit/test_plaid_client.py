@@ -818,12 +818,6 @@ class TestFlushItemErrors:
             "item-chase": MagicMock(error_code=None, error_message=None),
             "item-ok": MagicMock(error_code="OLD_ERROR", error_message="old msg"),
         }
-        mock_db.query.return_value.filter.return_value.first.side_effect = (
-            lambda: mock_items[
-                mock_db.query.return_value.filter.call_args[0][0].right.value
-            ]
-        )
-        # Simpler: just return items in order
         call_count = [0]
         items_list = [mock_items["item-chase"], mock_items["item-ok"]]
 
