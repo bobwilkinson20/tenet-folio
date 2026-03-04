@@ -476,7 +476,7 @@ All enhancements should follow this branch/PR workflow:
 
 6. **Merge** the PR into `main` using **"Squash and merge"** (not a regular merge commit). This keeps `main` history linear with one commit per PR. When using `gh pr merge`, pass the `--squash` flag:
    ```bash
-   gh pr merge --squash
+   gh pr merge --squash --delete-branch
    ```
 
 ## Changelog
