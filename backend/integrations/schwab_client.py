@@ -5,15 +5,15 @@ integration via the schwab-py library, fetching accounts, positions,
 and transactions using the Individual Trader API.
 """
 
+import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 
 from httpx import ConnectError, ReadTimeout, RemoteProtocolError
 
-from schwab.auth import client_from_token_file
+from schwab.auth import client_from_access_functions
 from schwab.client import Client
 
 from config import settings
@@ -26,6 +26,7 @@ from integrations.provider_protocol import (
     ProviderSyncError,
     ProviderSyncResult,
 )
+from services.credential_manager import get_credential, set_credential
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,42 @@ SELL_SUB_TYPES = frozenset({"SL", "SELL", "SELL TO OPEN", "SELL TO CLOSE",
                             "SELL SHORT", "SHORT SALE"})
 
 
+def read_token_from_keychain() -> dict | None:
+    """Read the Schwab OAuth token from macOS Keychain.
+
+    Returns:
+        Parsed token dict, or ``None`` if not stored.
+    """
+    raw = get_credential("SCHWAB_TOKEN")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Failed to parse SCHWAB_TOKEN from Keychain")
+        return None
+
+
+def write_token_to_keychain(token_data, *args, **kwargs):
+    """Persist the Schwab OAuth token to macOS Keychain.
+
+    Passed as ``token_write_func`` to schwab-py so every token refresh
+    is automatically stored in Keychain.  The extra ``*args``/``**kwargs``
+    are required because authlib's OAuth2Client passes additional keyword
+    arguments (e.g. ``refresh_token``) during token refresh callbacks.
+
+    Args:
+        token_data: Token dict from schwab-py.
+        *args: Extra positional args from authlib (ignored).
+        **kwargs: Extra keyword args from authlib (ignored).
+    """
+    raw = json.dumps(token_data)
+    if set_credential("SCHWAB_TOKEN", raw):
+        logger.info("Schwab token written to Keychain")
+    else:
+        logger.error("Failed to write Schwab token to Keychain")
+
+
 class SchwabClient:
     """Wrapper around the Charles Schwab Individual Trader API.
 
@@ -73,7 +110,6 @@ class SchwabClient:
         app_key: str | None = None,
         app_secret: str | None = None,
         callback_url: str | None = None,
-        token_path: str | None = None,
     ):
         """Initialize the client with credentials.
 
@@ -81,12 +117,10 @@ class SchwabClient:
             app_key: Schwab application key (defaults to settings).
             app_secret: Schwab application secret (defaults to settings).
             callback_url: OAuth callback URL (defaults to settings).
-            token_path: Path to token JSON file (defaults to settings).
         """
         self._app_key = app_key or settings.SCHWAB_APP_KEY
         self._app_secret = app_secret or settings.SCHWAB_APP_SECRET
         self._callback_url = callback_url or settings.SCHWAB_CALLBACK_URL
-        self._token_path = token_path or settings.SCHWAB_TOKEN_PATH
 
         # Lazily created on first use
         self._client: Client | None = None
@@ -97,10 +131,11 @@ class SchwabClient:
     def _get_client(self) -> Client:
         """Return (and cache) an authenticated schwab-py client."""
         if self._client is None:
-            self._client = client_from_token_file(
-                token_path=self._token_path,
+            self._client = client_from_access_functions(
                 api_key=self._app_key,
                 app_secret=self._app_secret,
+                token_read_func=read_token_from_keychain,
+                token_write_func=write_token_to_keychain,
             )
         return self._client
 
@@ -161,16 +196,14 @@ class SchwabClient:
         return "Schwab"
 
     def is_configured(self) -> bool:
-        """Check if Schwab credentials and token file are present.
+        """Check if Schwab credentials and token are present.
 
         Returns:
-            True if app key, app secret, and token file all exist.
+            True if app key, app secret, and token all exist.
         """
         if not self._app_key or not self._app_secret:
             return False
-        if not self._token_path:
-            return False
-        return Path(self._token_path).exists()
+        return get_credential("SCHWAB_TOKEN") is not None
 
     # ------------------------------------------------------------------
     # Accounts

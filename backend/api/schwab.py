@@ -6,10 +6,8 @@ checking token status, and an optional auto-intercept callback.
 """
 
 import html as html_mod
-import json
 import logging
 import time
-from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query
@@ -17,6 +15,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from config import settings
+from integrations.schwab_client import read_token_from_keychain, write_token_to_keychain
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +39,6 @@ def _cleanup_expired_contexts() -> None:
     expired = [s for s, (_, ts) in _auth_contexts.items() if now - ts > AUTH_CONTEXT_TTL]
     for s in expired:
         del _auth_contexts[s]
-
-
-def _write_token(token_data, _prev_token=None):
-    """Persist token JSON to disk (passed as ``token_write_func`` to schwab-py).
-
-    schwab-py calls this with the new token dict and optionally the
-    previous token as the second argument.
-    """
-    p = Path(settings.SCHWAB_TOKEN_PATH)
-    p.write_text(json.dumps(token_data, indent=2))
-    p.chmod(0o600)
-    logger.info("Schwab token written to %s", settings.SCHWAB_TOKEN_PATH)
 
 
 # ------------------------------------------------------------------
@@ -152,7 +139,7 @@ def exchange_token(body: TokenExchangeRequest):
             app_secret=settings.SCHWAB_APP_SECRET,
             auth_context=auth_context,
             received_url=body.received_url,
-            token_write_func=_write_token,
+            token_write_func=write_token_to_keychain,
         )
     except Exception as e:
         logger.error("Schwab token exchange failed: %s", e)
@@ -191,28 +178,19 @@ def get_token_status():
             message="Schwab is not configured.",
         )
 
-    p = Path(settings.SCHWAB_TOKEN_PATH)
-    if not p.exists():
+    token_data = read_token_from_keychain()
+    if token_data is None:
         return TokenStatusResponse(
             status="no_token",
             message="No OAuth token found. Complete the authorization flow to connect.",
         )
 
-    try:
-        token_data = json.loads(p.read_text())
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to read Schwab token file: %s", e)
-        return TokenStatusResponse(
-            status="no_token",
-            message="Token file is corrupted or unreadable.",
-        )
-
     creation_ts = token_data.get("creation_timestamp")
     if creation_ts is None:
-        logger.warning("Schwab token file missing 'creation_timestamp' — may need re-auth")
+        logger.warning("Schwab token missing 'creation_timestamp' — may need re-auth")
         return TokenStatusResponse(
             status="no_token",
-            message="Token file is missing creation timestamp.",
+            message="Token is missing creation timestamp.",
         )
 
     age_seconds = time.time() - creation_ts
@@ -337,7 +315,7 @@ def oauth_callback(
             app_secret=settings.SCHWAB_APP_SECRET,
             auth_context=auth_context,
             received_url=received_url,
-            token_write_func=_write_token,
+            token_write_func=write_token_to_keychain,
         )
     except Exception as e:
         logger.error("Schwab callback token exchange failed: %s", e)
@@ -352,6 +330,6 @@ def oauth_callback(
 
     return _callback_html(
         "Schwab Authorized",
-        "Token saved successfully. This tab will close automatically.",
+        "Token saved to Keychain. This tab will close automatically.",
         success=True,
     )

@@ -53,6 +53,7 @@ CREDENTIAL_KEYS: frozenset[str] = frozenset(
         "SCHWAB_APP_KEY",
         "SCHWAB_APP_SECRET",
         "SCHWAB_CALLBACK_URL",
+        "SCHWAB_TOKEN",
         "PLAID_CLIENT_ID",
         "PLAID_SECRET",
         "PLAID_ENVIRONMENT",

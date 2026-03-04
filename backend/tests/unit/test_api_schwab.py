@@ -1,6 +1,5 @@
 """Unit tests for the Schwab OAuth API endpoints."""
 
-import json
 import time
 from unittest.mock import MagicMock, patch
 
@@ -57,7 +56,7 @@ class TestExchangeToken:
         """Successful token exchange returns message and account count."""
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/test_token.json"
+        # (token stored in Keychain, no SCHWAB_TOKEN_PATH needed)
 
         # Pre-populate auth context
         mock_ctx = MagicMock()
@@ -123,38 +122,27 @@ class TestTokenStatus:
         assert response.status_code == 200
         assert response.json()["status"] == "no_credentials"
 
-    @patch("api.schwab.Path")
+    @patch("api.schwab.read_token_from_keychain", return_value=None)
     @patch("api.schwab.settings")
-    def test_no_token(self, mock_settings, mock_path_cls, client):
-        """Returns no_token when token file doesn't exist."""
+    def test_no_token(self, mock_settings, _mock_read, client):
+        """Returns no_token when no token in Keychain."""
         mock_settings.SCHWAB_APP_KEY = "key"
         mock_settings.SCHWAB_APP_SECRET = "secret"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/nonexistent.json"
-
-        mock_path = MagicMock()
-        mock_path.exists.return_value = False
-        mock_path_cls.return_value = mock_path
 
         response = client.get("/api/schwab/token-status")
 
         assert response.status_code == 200
         assert response.json()["status"] == "no_token"
 
-    @patch("api.schwab.Path")
+    @patch("api.schwab.read_token_from_keychain")
     @patch("api.schwab.settings")
-    def test_valid_token(self, mock_settings, mock_path_cls, client):
+    def test_valid_token(self, mock_settings, mock_read, client):
         """Returns valid for a token created 2 days ago."""
         mock_settings.SCHWAB_APP_KEY = "key"
         mock_settings.SCHWAB_APP_SECRET = "secret"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
 
         two_days_ago = time.time() - (2 * 86400)
-        token_data = json.dumps({"creation_timestamp": two_days_ago})
-
-        mock_path = MagicMock()
-        mock_path.exists.return_value = True
-        mock_path.read_text.return_value = token_data
-        mock_path_cls.return_value = mock_path
+        mock_read.return_value = {"creation_timestamp": two_days_ago}
 
         response = client.get("/api/schwab/token-status")
 
@@ -164,21 +152,15 @@ class TestTokenStatus:
         assert data["days_remaining"] is not None
         assert data["days_remaining"] > 4.0
 
-    @patch("api.schwab.Path")
+    @patch("api.schwab.read_token_from_keychain")
     @patch("api.schwab.settings")
-    def test_expiring_soon(self, mock_settings, mock_path_cls, client):
+    def test_expiring_soon(self, mock_settings, mock_read, client):
         """Returns expiring_soon for a token created 5.5 days ago."""
         mock_settings.SCHWAB_APP_KEY = "key"
         mock_settings.SCHWAB_APP_SECRET = "secret"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
 
         five_and_half_days_ago = time.time() - (5.5 * 86400)
-        token_data = json.dumps({"creation_timestamp": five_and_half_days_ago})
-
-        mock_path = MagicMock()
-        mock_path.exists.return_value = True
-        mock_path.read_text.return_value = token_data
-        mock_path_cls.return_value = mock_path
+        mock_read.return_value = {"creation_timestamp": five_and_half_days_ago}
 
         response = client.get("/api/schwab/token-status")
 
@@ -188,21 +170,15 @@ class TestTokenStatus:
         assert data["days_remaining"] is not None
         assert data["days_remaining"] < 2.0
 
-    @patch("api.schwab.Path")
+    @patch("api.schwab.read_token_from_keychain")
     @patch("api.schwab.settings")
-    def test_expired(self, mock_settings, mock_path_cls, client):
+    def test_expired(self, mock_settings, mock_read, client):
         """Returns expired for a token created 8 days ago."""
         mock_settings.SCHWAB_APP_KEY = "key"
         mock_settings.SCHWAB_APP_SECRET = "secret"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
 
         eight_days_ago = time.time() - (8 * 86400)
-        token_data = json.dumps({"creation_timestamp": eight_days_ago})
-
-        mock_path = MagicMock()
-        mock_path.exists.return_value = True
-        mock_path.read_text.return_value = token_data
-        mock_path_cls.return_value = mock_path
+        mock_read.return_value = {"creation_timestamp": eight_days_ago}
 
         response = client.get("/api/schwab/token-status")
 
@@ -230,7 +206,7 @@ class TestOAuthCallback:
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
         mock_settings.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
+        # (token stored in Keychain, no SCHWAB_TOKEN_PATH needed)
 
         mock_ctx = MagicMock()
         _auth_contexts["our-state-abc"] = (mock_ctx, time.time())
@@ -290,7 +266,7 @@ class TestOAuthCallback:
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
         mock_settings.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
+        # (token stored in Keychain, no SCHWAB_TOKEN_PATH needed)
 
         mock_ctx = MagicMock()
         _auth_contexts["pending-state"] = (mock_ctx, time.time())
@@ -312,7 +288,7 @@ class TestOAuthCallback:
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
         mock_settings.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
+        # (token stored in Keychain, no SCHWAB_TOKEN_PATH needed)
 
         mock_ctx = MagicMock()
         _auth_contexts["used-state"] = (mock_ctx, time.time())

@@ -119,14 +119,13 @@ def mock_settings():
         mock_s.SCHWAB_APP_KEY = "test-app-key"
         mock_s.SCHWAB_APP_SECRET = "test-app-secret"
         mock_s.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_s.SCHWAB_TOKEN_PATH = "/tmp/fake_token.json"
         yield mock_s
 
 
 @pytest.fixture
 def mock_schwab_auth():
-    """Patch schwab.auth.client_from_token_file."""
-    with patch("integrations.schwab_client.client_from_token_file") as mock_auth:
+    """Patch schwab.auth.client_from_access_functions."""
+    with patch("integrations.schwab_client.client_from_access_functions") as mock_auth:
         mock_client = MagicMock()
         mock_auth.return_value = mock_client
         yield mock_client
@@ -159,10 +158,9 @@ class TestSchwabClientProtocol:
         client = SchwabClient()
         assert client.provider_name == "Schwab"
 
-    @patch("integrations.schwab_client.Path")
-    def test_is_configured_true(self, mock_path, mock_settings, mock_schwab_auth):
-        """is_configured returns True when all credentials and token file exist."""
-        mock_path.return_value.exists.return_value = True
+    @patch("integrations.schwab_client.get_credential", return_value='{"token": "data"}')
+    def test_is_configured_true(self, _mock_cred, mock_settings, mock_schwab_auth):
+        """is_configured returns True when all credentials and token exist."""
         client = SchwabClient()
         assert client.is_configured() is True
 
@@ -178,18 +176,11 @@ class TestSchwabClientProtocol:
         client = SchwabClient()
         assert client.is_configured() is False
 
-    def test_is_configured_missing_token_path(self, mock_settings, mock_schwab_auth):
-        """is_configured returns False when token path is empty."""
-        mock_settings.SCHWAB_TOKEN_PATH = ""
-        client = SchwabClient()
-        assert client.is_configured() is False
-
-    @patch("integrations.schwab_client.Path")
-    def test_is_configured_token_file_missing(
-        self, mock_path, mock_settings, mock_schwab_auth
+    @patch("integrations.schwab_client.get_credential", return_value=None)
+    def test_is_configured_no_token_in_keychain(
+        self, _mock_cred, mock_settings, mock_schwab_auth
     ):
-        """is_configured returns False when token file doesn't exist."""
-        mock_path.return_value.exists.return_value = False
+        """is_configured returns False when no token in Keychain."""
         client = SchwabClient()
         assert client.is_configured() is False
 
@@ -198,18 +189,15 @@ class TestSchwabClientProtocol:
         client = SchwabClient()
         assert client._app_key == "test-app-key"
         assert client._app_secret == "test-app-secret"
-        assert client._token_path == "/tmp/fake_token.json"
 
     def test_constructor_accepts_overrides(self, mock_settings, mock_schwab_auth):
         """Constructor accepts explicit credential overrides."""
         client = SchwabClient(
             app_key="custom-key",
             app_secret="custom-secret",
-            token_path="/custom/token.json",
         )
         assert client._app_key == "custom-key"
         assert client._app_secret == "custom-secret"
-        assert client._token_path == "/custom/token.json"
 
 
 # ---------------------------------------------------------------------------
