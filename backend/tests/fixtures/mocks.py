@@ -1012,6 +1012,12 @@ class MockPlaidClient:
             self._raise_failure()
         return self._link_token
 
+    def create_update_link_token(self, access_token: str) -> str:
+        """Return mock update link token."""
+        if self._should_fail:
+            self._raise_failure()
+        return self._link_token
+
     def exchange_public_token(self, public_token: str) -> dict:
         """Return mock exchange result."""
         if self._should_fail:
@@ -1048,6 +1054,10 @@ class MockPlaidClient:
             balance_dates=dict(self._balance_dates),
             activities=list(self._activities),
         )
+
+    def flush_item_errors(self, db) -> None:
+        """Mock flush_item_errors (no-op)."""
+        pass
 
 
 # Sample Plaid test data

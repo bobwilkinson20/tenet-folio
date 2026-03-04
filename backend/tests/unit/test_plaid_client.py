@@ -701,7 +701,7 @@ class TestSyncAll:
         """sync_all with no PlaidItems in DB returns empty result."""
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        with patch.object(client, "_load_access_tokens", return_value=[]):
+        with patch.object(client, "_load_items_data", return_value=[]):
             result = client.sync_all()
         assert result.holdings == []
         assert result.accounts == []
@@ -720,8 +720,8 @@ class TestSyncAll:
 
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        tokens = [("access-token-1", "Vanguard")]
-        with patch.object(client, "_load_access_tokens", return_value=tokens):
+        items_data = [("access-token-1", "Vanguard", "item-1")]
+        with patch.object(client, "_load_items_data", return_value=items_data):
             result = client.sync_all()
 
         assert isinstance(result, ProviderSyncResult)
@@ -738,8 +738,8 @@ class TestSyncAll:
         # 3 transactions
         assert len(result.activities) == 3
 
-    def test_sync_all_catches_api_error(self, mock_settings, mock_plaid_api):
-        """API errors on one item don't block others."""
+    def test_sync_all_captures_holdings_error(self, mock_settings, mock_plaid_api):
+        """ApiException during holdings fetch is captured in pending errors."""
         from plaid import ApiException
         exc = ApiException(status=400, reason="Bad Request")
         exc.body = '{"error_code": "ITEM_LOGIN_REQUIRED", "error_message": "reauth needed"}'
@@ -749,13 +749,100 @@ class TestSyncAll:
 
         with patch("integrations.plaid_client.ApiClient"):
             client = PlaidClient()
-        tokens = [("bad-token", "Chase")]
-        with patch.object(client, "_load_access_tokens", return_value=tokens):
+        items_data = [("bad-token", "Chase", "item-chase")]
+        with patch.object(client, "_load_items_data", return_value=items_data):
             result = client.sync_all()
 
         assert len(result.errors) == 1
         assert result.errors[0].category == ErrorCategory.AUTH
         assert result.errors[0].institution_name == "Chase"
+
+        # Verify pending errors stored for flush
+        assert client._pending_item_errors["item-chase"] == (
+            "ITEM_LOGIN_REQUIRED", "reauth needed",
+        )
+
+    def test_sync_all_captures_activity_error(self, mock_settings, mock_plaid_api, sample_holdings_response):
+        """ApiException during activities fetch is captured when holdings succeed."""
+        from plaid import ApiException
+        exc = ApiException(status=400, reason="Bad Request")
+        exc.body = '{"error_code": "ITEM_LOGIN_REQUIRED", "error_message": "reauth needed"}'
+
+        mock_plaid_api.investments_holdings_get.return_value = sample_holdings_response
+        mock_plaid_api.investments_transactions_get.side_effect = exc
+
+        with patch("integrations.plaid_client.ApiClient"):
+            client = PlaidClient()
+        items_data = [("token-1", "Robinhood", "item-robin")]
+        with patch.object(client, "_load_items_data", return_value=items_data):
+            result = client.sync_all()
+
+        # Holdings succeeded, so we still get data
+        assert len(result.accounts) == 1
+        # But the activity error is captured and surfaced
+        assert len(result.errors) == 1
+        assert client._pending_item_errors["item-robin"] == (
+            "ITEM_LOGIN_REQUIRED", "reauth needed",
+        )
+
+    def test_sync_all_clears_error_on_full_success(
+        self,
+        mock_settings,
+        mock_plaid_api,
+        sample_holdings_response,
+        sample_transactions_response,
+    ):
+        """Full success (holdings + activities) clears pending error."""
+        mock_plaid_api.investments_holdings_get.return_value = sample_holdings_response
+        mock_plaid_api.investments_transactions_get.return_value = sample_transactions_response
+
+        with patch("integrations.plaid_client.ApiClient"):
+            client = PlaidClient()
+        items_data = [("token-1", "Vanguard", "item-1")]
+        with patch.object(client, "_load_items_data", return_value=items_data):
+            client.sync_all()
+
+        assert client._pending_item_errors["item-1"] == (None, None)
+
+
+class TestFlushItemErrors:
+    def test_flush_persists_errors(self, mock_settings):
+        """flush_item_errors persists pending errors to DB."""
+        client = PlaidClient()
+        client._pending_item_errors = {
+            "item-chase": ("ITEM_LOGIN_REQUIRED", "reauth needed"),
+            "item-ok": (None, None),
+        }
+
+        mock_db = MagicMock()
+        mock_items = {
+            "item-chase": MagicMock(error_code=None, error_message=None),
+            "item-ok": MagicMock(error_code="OLD_ERROR", error_message="old msg"),
+        }
+        call_count = [0]
+        items_list = [mock_items["item-chase"], mock_items["item-ok"]]
+
+        def side_effect():
+            idx = call_count[0]
+            call_count[0] += 1
+            return items_list[idx]
+
+        mock_db.query.return_value.filter.return_value.first = side_effect
+
+        client.flush_item_errors(mock_db)
+
+        assert mock_items["item-chase"].error_code == "ITEM_LOGIN_REQUIRED"
+        assert mock_items["item-chase"].error_message == "reauth needed"
+        assert mock_items["item-ok"].error_code is None
+        assert mock_items["item-ok"].error_message is None
+        assert client._pending_item_errors == {}
+
+    def test_flush_noop_when_no_pending(self, mock_settings):
+        """flush_item_errors is a no-op when no pending errors."""
+        client = PlaidClient()
+        mock_db = MagicMock()
+        client.flush_item_errors(mock_db)
+        mock_db.query.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -798,3 +885,63 @@ class TestLinkFlow:
         mock_plaid_api.item_remove.assert_called_once()
         call_args = mock_plaid_api.item_remove.call_args[0][0]
         assert call_args.access_token == "access-sandbox-xyz"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Update link token
+# ---------------------------------------------------------------------------
+
+
+class TestCreateUpdateLinkToken:
+    def test_creates_token_with_access_token(self, mock_settings, mock_plaid_api):
+        """Update link token is created with access_token and no products."""
+        mock_plaid_api.link_token_create.return_value = {
+            "link_token": "link-update-abc123",
+        }
+
+        with patch("integrations.plaid_client.ApiClient"):
+            client = PlaidClient()
+        token = client.create_update_link_token("access-sandbox-xyz")
+
+        assert token == "link-update-abc123"
+        mock_plaid_api.link_token_create.assert_called_once()
+        call_args = mock_plaid_api.link_token_create.call_args[0][0]
+        assert call_args.access_token == "access-sandbox-xyz"
+        # Update mode: no products
+        assert not hasattr(call_args, "products") or call_args.products is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: Error detail extraction
+# ---------------------------------------------------------------------------
+
+
+class TestExtractPlaidErrorDetails:
+    def test_valid_json_body(self, mock_settings):
+        from plaid import ApiException
+        exc = ApiException(status=400, reason="Bad Request")
+        exc.body = '{"error_code": "ITEM_LOGIN_REQUIRED", "error_message": "login needed"}'
+
+        code, msg = PlaidClient._extract_plaid_error_details(exc)
+
+        assert code == "ITEM_LOGIN_REQUIRED"
+        assert msg == "login needed"
+
+    def test_unparseable_body(self, mock_settings):
+        from plaid import ApiException
+        exc = ApiException(status=500, reason="Server Error")
+        exc.body = "not json"
+
+        code, msg = PlaidClient._extract_plaid_error_details(exc)
+
+        assert code == "UNKNOWN"
+        assert "Server Error" in msg or "500" in msg
+
+    def test_no_body(self, mock_settings):
+        from plaid import ApiException
+        exc = ApiException(status=400, reason="Bad Request")
+        exc.body = None
+
+        code, msg = PlaidClient._extract_plaid_error_details(exc)
+
+        assert code == "UNKNOWN"

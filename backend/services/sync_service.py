@@ -612,11 +612,16 @@ class SyncService:
 
         # Use sync_all() if available, otherwise fall back to get_holdings()
         sync_result: ProviderSyncResult | None = None
-        if hasattr(provider, "sync_all"):
-            sync_result = provider.sync_all()
-            remote_holdings = sync_result.holdings
-        else:
-            remote_holdings = provider.get_holdings()
+        try:
+            if hasattr(provider, "sync_all"):
+                sync_result = provider.sync_all()
+                remote_holdings = sync_result.holdings
+            else:
+                remote_holdings = provider.get_holdings()
+        finally:
+            # Flush provider-specific item error state (e.g., Plaid ITEM_LOGIN_REQUIRED)
+            if hasattr(provider, "flush_item_errors"):
+                provider.flush_item_errors(db)
 
         # Upsert accounts from provider data
         if sync_result and sync_result.accounts:

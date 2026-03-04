@@ -195,3 +195,93 @@ class TestRemoveItem:
     def test_returns_404_for_unknown_item(self, plaid_client):
         response = plaid_client.delete("/api/plaid/items/nonexistent")
         assert response.status_code == 404
+
+
+class TestUpdateLinkToken:
+    def test_creates_update_link_token(self, plaid_client, db):
+        db.add(PlaidItem(
+            item_id="item-update",
+            access_token="access-update",
+            institution_name="Chase",
+        ))
+        db.commit()
+
+        response = plaid_client.post("/api/plaid/items/item-update/update-link-token")
+        assert response.status_code == 200
+        data = response.json()
+        assert "link_token" in data
+        assert data["link_token"] == "link-sandbox-test-token"
+
+    def test_returns_404_for_unknown_item(self, plaid_client):
+        response = plaid_client.post("/api/plaid/items/nonexistent/update-link-token")
+        assert response.status_code == 404
+
+
+class TestClearError:
+    def test_clears_error_fields(self, plaid_client, db):
+        db.add(PlaidItem(
+            item_id="item-err",
+            access_token="access-err",
+            institution_name="Chase",
+            error_code="ITEM_LOGIN_REQUIRED",
+            error_message="login needed",
+        ))
+        db.commit()
+
+        response = plaid_client.post("/api/plaid/items/item-err/clear-error")
+        assert response.status_code == 200
+        assert response.json()["item_id"] == "item-err"
+
+        # Verify DB updated
+        item = db.query(PlaidItem).filter(PlaidItem.item_id == "item-err").first()
+        assert item.error_code is None
+        assert item.error_message is None
+
+    def test_returns_404_for_unknown_item(self, plaid_client):
+        response = plaid_client.post("/api/plaid/items/nonexistent/clear-error")
+        assert response.status_code == 404
+
+    def test_noop_on_healthy_item(self, plaid_client, db):
+        db.add(PlaidItem(
+            item_id="item-ok",
+            access_token="access-ok",
+            institution_name="Vanguard",
+        ))
+        db.commit()
+
+        response = plaid_client.post("/api/plaid/items/item-ok/clear-error")
+        assert response.status_code == 200
+
+        item = db.query(PlaidItem).filter(PlaidItem.item_id == "item-ok").first()
+        assert item.error_code is None
+        assert item.error_message is None
+
+
+class TestListItemsWithErrors:
+    def test_error_fields_included_in_response(self, plaid_client, db):
+        db.add(PlaidItem(
+            item_id="item-healthy",
+            access_token="access-h",
+            institution_name="Vanguard",
+        ))
+        db.add(PlaidItem(
+            item_id="item-errored",
+            access_token="access-e",
+            institution_name="Chase",
+            error_code="ITEM_LOGIN_REQUIRED",
+            error_message="login needed",
+        ))
+        db.commit()
+
+        response = plaid_client.get("/api/plaid/items")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+
+        errored = next(d for d in data if d["item_id"] == "item-errored")
+        assert errored["error_code"] == "ITEM_LOGIN_REQUIRED"
+        assert errored["error_message"] == "login needed"
+
+        healthy = next(d for d in data if d["item_id"] == "item-healthy")
+        assert healthy["error_code"] is None
+        assert healthy["error_message"] is None

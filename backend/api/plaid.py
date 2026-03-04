@@ -50,6 +50,8 @@ class PlaidItemResponse(BaseModel):
     item_id: str
     institution_id: str | None = None
     institution_name: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
     created_at: str | None = None
 
 
@@ -145,6 +147,8 @@ def list_items(db: Session = Depends(get_db)):
             item_id=item.item_id,
             institution_id=item.institution_id,
             institution_name=item.institution_name,
+            error_code=item.error_code,
+            error_message=item.error_message,
             created_at=item.created_at.isoformat() if item.created_at else None,
         )
         for item in items
@@ -172,3 +176,44 @@ def remove_item(
     db.commit()
     logger.info("Deleted PlaidItem %s", item_id)
     return RemoveItemResponse(status="ok", item_id=item_id)
+
+
+@router.post("/items/{item_id}/update-link-token", response_model=LinkTokenResponse)
+def create_update_link_token(
+    item_id: str,
+    db: Session = Depends(get_db),
+    client: PlaidClient = Depends(_get_plaid_client),
+):
+    """Create a Plaid Link token in update mode for re-authentication."""
+    item = db.query(PlaidItem).filter(PlaidItem.item_id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail=f"Item not found: {item_id}")
+
+    try:
+        link_token = client.create_update_link_token(item.access_token)
+        return LinkTokenResponse(link_token=link_token)
+    except Exception as e:
+        logger.error("Failed to create update link token for %s: %s", item_id, e)
+        raise HTTPException(status_code=500, detail="Failed to create update link token")
+
+
+class ClearErrorResponse(BaseModel):
+    status: str
+    item_id: str
+
+
+@router.post("/items/{item_id}/clear-error", response_model=ClearErrorResponse)
+def clear_item_error(
+    item_id: str,
+    db: Session = Depends(get_db),
+):
+    """Clear error state on a PlaidItem after successful re-authentication."""
+    item = db.query(PlaidItem).filter(PlaidItem.item_id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail=f"Item not found: {item_id}")
+
+    item.error_code = None
+    item.error_message = None
+    db.commit()
+    logger.info("Cleared error on PlaidItem %s", item_id)
+    return ClearErrorResponse(status="ok", item_id=item_id)

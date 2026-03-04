@@ -9,11 +9,17 @@ The sync_all() method loads access tokens from the PlaidItem DB table
 internally, keeping the sync service free of provider-specific logic.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from plaid import ApiException, Environment
 from plaid.api.plaid_api import PlaidApi
@@ -82,6 +88,8 @@ class PlaidClient:
 
         # Lazily created on first use
         self._api: PlaidApi | None = None
+        # Populated by sync_all(), consumed by flush_item_errors()
+        self._pending_item_errors: dict[str, tuple[str | None, str | None]] = {}
 
     def _get_api(self) -> PlaidApi:
         """Return (and cache) a PlaidApi instance."""
@@ -141,6 +149,29 @@ class PlaidClient:
         response = api.link_token_create(request)
         return response["link_token"]
 
+    def create_update_link_token(self, access_token: str) -> str:
+        """Create a Plaid Link token in update mode for re-authentication.
+
+        Update mode preserves the existing Item and access token.
+        Plaid detects update mode when access_token is set and products is omitted.
+
+        Args:
+            access_token: The existing Item's access token.
+
+        Returns:
+            The link_token string to be passed to Plaid Link.
+        """
+        api = self._get_api()
+        request = LinkTokenCreateRequest(
+            user=LinkTokenCreateRequestUser(client_user_id="tenet-folio-user"),
+            client_name="TenetFolio",
+            country_codes=[CountryCode("US")],
+            language="en",
+            access_token=access_token,
+        )
+        response = api.link_token_create(request)
+        return response["link_token"]
+
     def exchange_public_token(self, public_token: str) -> dict:
         """Exchange a Plaid Link public_token for a permanent access_token.
 
@@ -183,24 +214,21 @@ class PlaidClient:
     # sync_all
     # ------------------------------------------------------------------
 
-    def _load_access_tokens(self) -> list[tuple[str, str]]:
-        """Load access tokens from the PlaidItem DB table.
+    @staticmethod
+    def _extract_plaid_error_details(exc: ApiException) -> tuple[str, str]:
+        """Extract error_code and error_message from a Plaid ApiException.
 
         Returns:
-            List of ``(access_token, institution_name)`` tuples.
+            Tuple of ``(error_code, error_message)``.
         """
-        from database import get_db
-        from models.plaid_item import PlaidItem
-
-        db = next(get_db())
         try:
-            plaid_items = db.query(PlaidItem).all()
-            return [
-                (item.access_token, item.institution_name or "Unknown")
-                for item in plaid_items
-            ]
-        finally:
-            db.close()
+            body = json.loads(exc.body) if exc.body else {}
+            return (
+                body.get("error_code", "UNKNOWN"),
+                body.get("error_message", str(exc)),
+            )
+        except Exception:
+            return ("UNKNOWN", str(exc))
 
     def sync_all(self) -> ProviderSyncResult:
         """Fetch all data from Plaid across all linked Items.
@@ -208,12 +236,18 @@ class PlaidClient:
         Loads access tokens from the PlaidItem DB table internally,
         keeping the sync_service free of provider-specific logic.
 
+        Error state (error_code/error_message) is collected but NOT
+        persisted here — SQLite doesn't support concurrent writers, and
+        the sync service already holds a transaction.  Call
+        ``flush_item_errors(db)`` with the sync service's session to
+        persist the updates.
+
         Returns:
             ProviderSyncResult with holdings, accounts, activities, and errors.
         """
-        access_tokens = self._load_access_tokens()
+        items_data = self._load_items_data()
 
-        if not access_tokens:
+        if not items_data:
             return ProviderSyncResult(holdings=[], accounts=[], errors=[], activities=[])
 
         api = self._get_api()
@@ -225,7 +259,11 @@ class PlaidClient:
 
         now = datetime.now(timezone.utc)
 
-        for access_token, institution_name in access_tokens:
+        # Collect error state updates: item_id -> (code | None, msg | None)
+        pending_errors: dict[str, tuple[str | None, str | None]] = {}
+
+        for access_token, institution_name, item_id in items_data:
+            holdings_ok = False
             try:
                 holdings, accounts = self._fetch_item_holdings(
                     api, access_token, institution_name
@@ -234,8 +272,11 @@ class PlaidClient:
                 all_accounts.extend(accounts)
                 for acct in accounts:
                     balance_dates[acct.id] = now
+                holdings_ok = True
             except ApiException as e:
                 errors.append(self._map_plaid_error(e, institution_name))
+                code, msg = self._extract_plaid_error_details(e)
+                pending_errors[item_id] = (code, msg)
             except Exception as e:
                 errors.append(ProviderSyncError(
                     message=f"Failed to fetch holdings from {institution_name}: {e}",
@@ -251,11 +292,24 @@ class PlaidClient:
                     "Failed to fetch activities from %s: %s",
                     institution_name, e,
                 )
+                # Capture activity-level auth errors only if holdings didn't
+                # already fail — avoids double-reporting the same item error.
+                if item_id not in pending_errors:
+                    code, msg = self._extract_plaid_error_details(e)
+                    pending_errors[item_id] = (code, msg)
+                    errors.append(self._map_plaid_error(e, institution_name))
             except Exception:
                 logger.warning(
                     "Failed to fetch activities from %s",
                     institution_name, exc_info=True,
                 )
+
+            # Clear error on full success (both holdings and activities ok)
+            if holdings_ok and item_id not in pending_errors:
+                pending_errors[item_id] = (None, None)
+
+        # Store for flush_item_errors()
+        self._pending_item_errors = pending_errors
 
         logger.info(
             "Plaid: %d accounts, %d holdings, %d activities fetched",
@@ -269,6 +323,49 @@ class PlaidClient:
             balance_dates=balance_dates,
             activities=all_activities,
         )
+
+    def _load_items_data(self) -> list[tuple[str, str, str]]:
+        """Load access tokens and metadata from the PlaidItem DB table.
+
+        Returns:
+            List of ``(access_token, institution_name, item_id)`` tuples.
+        """
+        from database import get_session_local
+        from models.plaid_item import PlaidItem
+
+        SessionLocal = get_session_local()
+        db = SessionLocal()
+        try:
+            plaid_items = db.query(PlaidItem).all()
+            return [
+                (item.access_token, item.institution_name or "Unknown", item.item_id)
+                for item in plaid_items
+            ]
+        finally:
+            db.close()
+
+    def flush_item_errors(self, db: "Session") -> None:
+        """Persist pending PlaidItem error state using the caller's DB session.
+
+        Must be called after ``sync_all()`` with a session that is safe
+        to write to (i.e., the sync service's own session).
+        """
+        from models.plaid_item import PlaidItem
+
+        if not self._pending_item_errors:
+            return
+
+        count = len(self._pending_item_errors)
+        for item_id, (code, msg) in self._pending_item_errors.items():
+            db_item = db.query(PlaidItem).filter(
+                PlaidItem.item_id == item_id
+            ).first()
+            if db_item:
+                db_item.error_code = code
+                db_item.error_message = msg
+
+        self._pending_item_errors = {}
+        logger.info("Flushed Plaid item error state for %d items", count)
 
     # ------------------------------------------------------------------
     # Internal: fetch holdings for a single Item
