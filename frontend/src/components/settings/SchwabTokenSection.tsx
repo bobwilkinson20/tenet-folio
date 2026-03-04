@@ -80,7 +80,10 @@ export function SchwabTokenSection() {
   };
 
   const handleExchange = async () => {
-    if (!authState || !redirectUrl.trim()) return;
+    if (!authState || !redirectUrl.trim()) {
+      setError("Authorization state missing. Please start the flow again.");
+      return;
+    }
     setExchanging(true);
     setError(null);
     try {

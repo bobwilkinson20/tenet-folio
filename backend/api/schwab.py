@@ -42,17 +42,16 @@ def _cleanup_expired_contexts() -> None:
         del _auth_contexts[s]
 
 
-def _make_token_writer():
-    """Return a ``token_write_func`` for schwab-py that persists to disk."""
-    token_path = settings.SCHWAB_TOKEN_PATH
+def _write_token(token_data, _prev_token=None):
+    """Persist token JSON to disk (passed as ``token_write_func`` to schwab-py).
 
-    def _write(token_data, _prev_token=None):  # schwab-py passes previous token as 2nd arg
-        p = Path(token_path)
-        p.write_text(json.dumps(token_data, indent=2))
-        p.chmod(0o600)
-        logger.info("Schwab token written to %s", token_path)
-
-    return _write
+    schwab-py calls this with the new token dict and optionally the
+    previous token as the second argument.
+    """
+    p = Path(settings.SCHWAB_TOKEN_PATH)
+    p.write_text(json.dumps(token_data, indent=2))
+    p.chmod(0o600)
+    logger.info("Schwab token written to %s", settings.SCHWAB_TOKEN_PATH)
 
 
 # ------------------------------------------------------------------
@@ -153,7 +152,7 @@ def exchange_token(body: TokenExchangeRequest):
             app_secret=settings.SCHWAB_APP_SECRET,
             auth_context=auth_context,
             received_url=body.received_url,
-            token_write_func=_make_token_writer(),
+            token_write_func=_write_token,
         )
     except Exception as e:
         logger.error("Schwab token exchange failed: %s", e)
@@ -210,6 +209,7 @@ def get_token_status():
 
     creation_ts = token_data.get("creation_timestamp")
     if creation_ts is None:
+        logger.warning("Schwab token file missing 'creation_timestamp' — may need re-auth")
         return TokenStatusResponse(
             status="no_token",
             message="Token file is missing creation timestamp.",
@@ -337,7 +337,7 @@ def oauth_callback(
             app_secret=settings.SCHWAB_APP_SECRET,
             auth_context=auth_context,
             received_url=received_url,
-            token_write_func=_make_token_writer(),
+            token_write_func=_write_token,
         )
     except Exception as e:
         logger.error("Schwab callback token exchange failed: %s", e)
