@@ -58,7 +58,7 @@ vi.mock("../../api", () => ({
 vi.mock("../../api/schwab", () => ({
   schwabApi: {
     getTokenStatus: vi.fn().mockResolvedValue({
-      data: { status: "no_credentials", message: "", expires_at: null, days_remaining: null },
+      data: { status: "no_credentials", message: "", days_remaining: null },
     }),
     createAuthUrl: vi.fn(),
     exchangeToken: vi.fn(),

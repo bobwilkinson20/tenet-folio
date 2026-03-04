@@ -19,7 +19,7 @@ describe("SchwabTokenWarning", () => {
 
   it("renders nothing when valid", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "valid", message: "Valid.", expires_at: null, days_remaining: 5.0 },
+      data: { status: "valid", message: "Valid.", days_remaining: 5.0 },
     } as never);
 
     const { container } = render(<SchwabTokenWarning />);
@@ -36,7 +36,7 @@ describe("SchwabTokenWarning", () => {
 
   it("renders nothing when no_credentials", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_credentials", message: "Not configured.", expires_at: null, days_remaining: null },
+      data: { status: "no_credentials", message: "Not configured.", days_remaining: null },
     } as never);
 
     const { container } = render(<SchwabTokenWarning />);
@@ -52,7 +52,7 @@ describe("SchwabTokenWarning", () => {
 
   it("renders nothing when no_token", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token.", days_remaining: null },
     } as never);
 
     const { container } = render(<SchwabTokenWarning />);

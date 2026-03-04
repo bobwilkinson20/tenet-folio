@@ -13,7 +13,6 @@ export interface SchwabTokenExchangeResponse {
 export interface SchwabTokenStatus {
   status: "valid" | "expiring_soon" | "expired" | "no_token" | "no_credentials";
   message: string;
-  expires_at: string | null;
   days_remaining: number | null;
 }
 

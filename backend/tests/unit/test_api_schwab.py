@@ -10,6 +10,9 @@ from api.schwab import _auth_contexts, AUTH_CONTEXT_TTL
 class TestCreateAuthUrl:
     """Tests for POST /api/schwab/auth-url."""
 
+    def setup_method(self):
+        _auth_contexts.clear()
+
     @patch("api.schwab.settings")
     @patch("schwab.auth.get_auth_context")
     def test_success(self, mock_get_auth, mock_settings, client):
@@ -45,6 +48,9 @@ class TestCreateAuthUrl:
 class TestExchangeToken:
     """Tests for POST /api/schwab/exchange-token."""
 
+    def setup_method(self):
+        _auth_contexts.clear()
+
     @patch("api.schwab.settings")
     @patch("schwab.auth.client_from_received_url")
     def test_success(self, mock_exchange, mock_settings, client):
@@ -64,13 +70,10 @@ class TestExchangeToken:
         mock_client.get_account_numbers.return_value = mock_resp
         mock_exchange.return_value = mock_client
 
-        try:
-            response = client.post(
-                "/api/schwab/exchange-token",
-                json={"state": "test-state", "received_url": "https://127.0.0.1?code=xyz&session=test-state"},
-            )
-        finally:
-            _auth_contexts.pop("test-state", None)
+        response = client.post(
+            "/api/schwab/exchange-token",
+            json={"state": "test-state", "received_url": "https://127.0.0.1?code=xyz&session=test-state"},
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -88,25 +91,26 @@ class TestExchangeToken:
         assert "invalid" in response.json()["detail"].lower() or "expired" in response.json()["detail"].lower()
 
     def test_expired_context(self, client):
-        """Expired auth context returns 400."""
+        """Expired auth context is cleaned up and returns 400."""
         mock_ctx = MagicMock()
-        # Set creation time well in the past
+        # Set creation time well in the past — cleanup removes it before lookup
         _auth_contexts["expired-state"] = (mock_ctx, time.time() - AUTH_CONTEXT_TTL - 100)
 
-        try:
-            response = client.post(
-                "/api/schwab/exchange-token",
-                json={"state": "expired-state", "received_url": "https://127.0.0.1?code=xyz"},
-            )
-        finally:
-            _auth_contexts.pop("expired-state", None)
+        response = client.post(
+            "/api/schwab/exchange-token",
+            json={"state": "expired-state", "received_url": "https://127.0.0.1?code=xyz"},
+        )
 
         assert response.status_code == 400
         assert "expired" in response.json()["detail"].lower()
+        assert "expired-state" not in _auth_contexts
 
 
 class TestTokenStatus:
     """Tests for GET /api/schwab/token-status."""
+
+    def setup_method(self):
+        _auth_contexts.clear()
 
     @patch("api.schwab.settings")
     def test_no_credentials(self, mock_settings, client):
@@ -232,17 +236,14 @@ class TestOAuthCallback:
         _auth_contexts["our-state-abc"] = (mock_ctx, time.time())
         mock_exchange.return_value = MagicMock()
 
-        try:
-            response = client.get(
-                "/api/schwab/callback",
-                params={
-                    "code": "auth-code",
-                    "session": "schwab-session-xyz",
-                    "state": "our-state-abc",
-                },
-            )
-        finally:
-            _auth_contexts.pop("our-state-abc", None)
+        response = client.get(
+            "/api/schwab/callback",
+            params={
+                "code": "auth-code",
+                "session": "schwab-session-xyz",
+                "state": "our-state-abc",
+            },
+        )
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -273,13 +274,10 @@ class TestOAuthCallback:
         mock_ctx = MagicMock()
         _auth_contexts["old-state"] = (mock_ctx, time.time() - AUTH_CONTEXT_TTL - 100)
 
-        try:
-            response = client.get(
-                "/api/schwab/callback",
-                params={"code": "auth-code", "session": "s", "state": "old-state"},
-            )
-        finally:
-            _auth_contexts.pop("old-state", None)
+        response = client.get(
+            "/api/schwab/callback",
+            params={"code": "auth-code", "session": "s", "state": "old-state"},
+        )
 
         assert response.status_code == 200
         assert "Authorization Failed" in response.text
@@ -298,13 +296,10 @@ class TestOAuthCallback:
         _auth_contexts["pending-state"] = (mock_ctx, time.time())
         mock_exchange.side_effect = Exception("Bad code")
 
-        try:
-            response = client.get(
-                "/api/schwab/callback",
-                params={"code": "bad-code", "session": "s", "state": "pending-state"},
-            )
-        finally:
-            _auth_contexts.pop("pending-state", None)
+        response = client.get(
+            "/api/schwab/callback",
+            params={"code": "bad-code", "session": "s", "state": "pending-state"},
+        )
 
         assert response.status_code == 200
         assert "Authorization Failed" in response.text

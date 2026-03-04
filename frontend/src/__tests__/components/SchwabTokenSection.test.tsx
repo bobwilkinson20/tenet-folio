@@ -23,7 +23,7 @@ describe("SchwabTokenSection", () => {
 
   it("renders nothing when no_credentials", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_credentials", message: "Not configured.", expires_at: null, days_remaining: null },
+      data: { status: "no_credentials", message: "Not configured.", days_remaining: null },
     } as never);
 
     const { container } = render(<SchwabTokenSection />);
@@ -38,7 +38,7 @@ describe("SchwabTokenSection", () => {
 
   it("shows Not Authorized badge and Authorize button when no_token", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token found.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token found.", days_remaining: null },
     } as never);
 
     render(<SchwabTokenSection />);
@@ -52,7 +52,7 @@ describe("SchwabTokenSection", () => {
 
   it("shows Token Valid badge with days remaining when valid", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "valid", message: "Valid.", expires_at: null, days_remaining: 5.3 },
+      data: { status: "valid", message: "Valid.", days_remaining: 5.3 },
     } as never);
 
     render(<SchwabTokenSection />);
@@ -107,7 +107,7 @@ describe("SchwabTokenSection", () => {
 
   it("clicking Authorize calls createAuthUrl and opens window", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token.", days_remaining: null },
     } as never);
     mockedCreateAuthUrl.mockResolvedValue({
       data: { authorization_url: "https://schwab.example.com/auth", state: "state123" },
@@ -138,7 +138,7 @@ describe("SchwabTokenSection", () => {
 
   it("paste flow calls exchangeToken on submit", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token.", days_remaining: null },
     } as never);
     mockedCreateAuthUrl.mockResolvedValue({
       data: { authorization_url: "https://schwab.example.com/auth", state: "state123" },
@@ -150,10 +150,10 @@ describe("SchwabTokenSection", () => {
     // After exchange, re-fetch shows valid
     mockedGetTokenStatus
       .mockResolvedValueOnce({
-        data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+        data: { status: "no_token", message: "No token.", days_remaining: null },
       } as never)
       .mockResolvedValueOnce({
-        data: { status: "valid", message: "Valid.", expires_at: null, days_remaining: 6.8 },
+        data: { status: "valid", message: "Valid.", days_remaining: 6.8 },
       } as never);
 
     vi.stubGlobal("open", vi.fn().mockReturnValue({ location: { href: "" }, close: vi.fn() }));
@@ -186,7 +186,7 @@ describe("SchwabTokenSection", () => {
   it("auto-detects callback completion via polling", async () => {
     // Initial status: no token
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token.", days_remaining: null },
     } as never);
     mockedCreateAuthUrl.mockResolvedValue({
       data: { authorization_url: "https://schwab.example.com/auth", state: "state123" },
@@ -208,7 +208,7 @@ describe("SchwabTokenSection", () => {
 
     // Simulate callback completing — next poll returns valid
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "valid", message: "Valid.", expires_at: null, days_remaining: 6.9 },
+      data: { status: "valid", message: "Valid.", days_remaining: 6.9 },
     } as never);
 
     // Wait for the polling interval (3s) to detect the new token
@@ -225,7 +225,7 @@ describe("SchwabTokenSection", () => {
 
   it("shows error message on exchange failure", async () => {
     mockedGetTokenStatus.mockResolvedValue({
-      data: { status: "no_token", message: "No token.", expires_at: null, days_remaining: null },
+      data: { status: "no_token", message: "No token.", days_remaining: null },
     } as never);
     mockedCreateAuthUrl.mockResolvedValue({
       data: { authorization_url: "https://schwab.example.com/auth", state: "state123" },
