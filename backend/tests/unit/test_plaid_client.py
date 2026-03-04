@@ -779,7 +779,8 @@ class TestSyncAll:
 
         # Holdings succeeded, so we still get data
         assert len(result.accounts) == 1
-        # But the activity error is captured
+        # But the activity error is captured and surfaced
+        assert len(result.errors) == 1
         assert client._pending_item_errors["item-robin"] == (
             "ITEM_LOGIN_REQUIRED", "reauth needed",
         )

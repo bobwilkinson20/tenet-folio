@@ -88,6 +88,8 @@ class PlaidClient:
 
         # Lazily created on first use
         self._api: PlaidApi | None = None
+        # Populated by sync_all(), consumed by flush_item_errors()
+        self._pending_item_errors: dict[str, tuple[str | None, str | None]] = {}
 
     def _get_api(self) -> PlaidApi:
         """Return (and cache) a PlaidApi instance."""
@@ -350,11 +352,11 @@ class PlaidClient:
         """
         from models.plaid_item import PlaidItem
 
-        pending = getattr(self, "_pending_item_errors", None)
-        if not pending:
+        if not self._pending_item_errors:
             return
 
-        for item_id, (code, msg) in pending.items():
+        count = len(self._pending_item_errors)
+        for item_id, (code, msg) in self._pending_item_errors.items():
             db_item = db.query(PlaidItem).filter(
                 PlaidItem.item_id == item_id
             ).first()
@@ -363,7 +365,7 @@ class PlaidClient:
                 db_item.error_message = msg
 
         self._pending_item_errors = {}
-        logger.info("Flushed Plaid item error state for %d items", len(pending))
+        logger.info("Flushed Plaid item error state for %d items", count)
 
     # ------------------------------------------------------------------
     # Internal: fetch holdings for a single Item

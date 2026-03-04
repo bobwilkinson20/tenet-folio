@@ -32,13 +32,13 @@ export function PlaidUpdateButton({ itemId, onSuccess }: PlaidUpdateButtonProps)
   }, [itemId]);
 
   const handlePlaidSuccess = useCallback(async () => {
+    setLinkToken(null);
     try {
       await plaidApi.clearItemError(itemId);
+      onSuccess?.();
     } catch {
       setError("Failed to clear error state");
     }
-    setLinkToken(null);
-    onSuccess?.();
   }, [itemId, onSuccess]);
 
   const handleExit = useCallback(
