@@ -1,6 +1,5 @@
 """Application configuration using pydantic-settings."""
 
-from pathlib import Path
 from typing import Any
 
 from pydantic import field_validator, model_validator
@@ -91,7 +90,6 @@ class Settings(BaseSettings):
     SCHWAB_APP_KEY: str = ""
     SCHWAB_APP_SECRET: str = ""
     SCHWAB_CALLBACK_URL: str = "https://127.0.0.1:8000/api/schwab/callback"
-    SCHWAB_TOKEN_PATH: str = ""
 
     # Plaid API credentials (optional)
     PLAID_CLIENT_ID: str = ""
@@ -124,19 +122,6 @@ class Settings(BaseSettings):
         if v.upper() not in valid:
             raise ValueError(f"LOG_LEVEL must be one of {valid}, got {v!r}")
         return v.upper()
-
-    @model_validator(mode="after")
-    def apply_schwab_token_path_default(self) -> "Settings":
-        """Set SCHWAB_TOKEN_PATH to the default when empty but credentials exist.
-
-        Avoids requiring the user to persist the token path — the default
-        is ``backend/.schwab_token.json`` next to the application code.
-        """
-        if not self.SCHWAB_TOKEN_PATH and self.SCHWAB_APP_KEY:
-            self.SCHWAB_TOKEN_PATH = str(
-                Path(__file__).parent / ".schwab_token.json"
-            )
-        return self
 
     @model_validator(mode="after")
     def apply_profile_database_url(self) -> "Settings":

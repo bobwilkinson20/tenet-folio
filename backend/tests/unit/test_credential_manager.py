@@ -187,6 +187,7 @@ class TestCredentialKeys:
             "SCHWAB_APP_KEY",
             "SCHWAB_APP_SECRET",
             "SCHWAB_CALLBACK_URL",
+            "SCHWAB_TOKEN",
             "PLAID_CLIENT_ID",
             "PLAID_SECRET",
             "PLAID_ENVIRONMENT",
@@ -201,7 +202,6 @@ class TestCredentialKeys:
         assert "LOG_LEVEL" not in CREDENTIAL_KEYS
 
     def test_excludes_path_keys(self):
-        assert "SCHWAB_TOKEN_PATH" not in CREDENTIAL_KEYS
         assert "COINBASE_KEY_FILE" not in CREDENTIAL_KEYS
 
     def test_is_frozen(self):

@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 from schwab.auth import client_from_manual_flow
 
+from integrations.schwab_client import write_token_to_keychain
+
 
 def _get_setting(key: str) -> str:
     """Look up a setting from env vars, .env file, or keychain."""
@@ -55,41 +57,35 @@ def _offer_keychain_store(credentials: dict[str, str]) -> None:
         print("  Skipped keychain storage.")
 
 
-def get_default_token_path() -> str:
-    """Return the default token file path.
-
-    Returns:
-        Absolute path to ``backend/.schwab_token.json``.
-    """
-    return str(Path(__file__).parent.parent / ".schwab_token.json")
-
-
 def run_oauth_flow(
     app_key: str,
     app_secret: str,
     callback_url: str,
-    token_path: str,
 ):
     """Run the schwab-py manual OAuth flow.
 
     Prints a URL for the user to open in a browser.  After authorizing,
     the user pastes the redirect URL back into the terminal.  The token
-    is saved to *token_path*.
+    is saved to macOS Keychain.
 
     Args:
         app_key: Schwab application key.
         app_secret: Schwab application secret.
         callback_url: OAuth callback URL (must match app config exactly).
-        token_path: Where to write the token JSON file.
 
     Returns:
         An authenticated schwab-py client.
     """
+    # HACK: schwab-py requires token_path even when token_write_func is
+    # provided.  When token_write_func is set, schwab-py delegates all
+    # writes to the callback and never touches token_path, so the sentinel
+    # value is safe.  See schwab-py source: auth.py::client_from_manual_flow.
     return client_from_manual_flow(
         api_key=app_key,
         app_secret=app_secret,
         callback_url=callback_url,
-        token_path=token_path,
+        token_write_func=write_token_to_keychain,
+        token_path="<keychain>",
     )
 
 
@@ -129,7 +125,6 @@ def main():
     stored_key = _get_setting("SCHWAB_APP_KEY")
     stored_secret = _get_setting("SCHWAB_APP_SECRET")
     stored_callback = _get_setting("SCHWAB_CALLBACK_URL")
-    stored_token_path = _get_setting("SCHWAB_TOKEN_PATH")
 
     if stored_key and stored_secret:
         print(f"Found stored credentials (App Key: {stored_key[:8]}...)")
@@ -172,20 +167,13 @@ def main():
     if not callback_url:
         callback_url = default_callback
 
-    default_token_path = stored_token_path or get_default_token_path()
-    token_path = input(
-        f"Enter token file path (default: {default_token_path}): "
-    ).strip()
-    if not token_path:
-        token_path = default_token_path
-
     print()
     print("Starting OAuth flow...")
     print("Follow the instructions below to authorize your app.")
     print()
 
     try:
-        client = run_oauth_flow(app_key, app_secret, callback_url, token_path)
+        client = run_oauth_flow(app_key, app_secret, callback_url)
     except Exception as e:
         print(f"Error during OAuth flow: {e}")
         print()
@@ -212,28 +200,19 @@ def main():
         print(f"  - Account {acct.get('accountNumber', 'unknown')}")
 
     print()
-    print("Add the following to your .env file:")
+    print("Add the following to your .env file (or store in Keychain):")
     print()
     print(f"SCHWAB_APP_KEY={app_key}")
     print(f"SCHWAB_APP_SECRET={app_secret}")
     if callback_url != default_callback:
         print(f"SCHWAB_CALLBACK_URL={callback_url}")
-    print(f"SCHWAB_TOKEN_PATH={token_path}")
 
+    print()
+    print("OAuth token has been stored in macOS Keychain.")
     print()
     print("IMPORTANT: Schwab refresh tokens expire after ~7 days. You will")
     print("need to re-authenticate periodically by running:")
     print("  python scripts/refresh_schwab_token.py")
-
-    # Set restrictive permissions on token file
-    token_file = Path(token_path)
-    if token_file.exists():
-        token_file.chmod(0o600)
-        print(f"\n  Set {token_path} permissions to 0600")
-
-    print()
-    print("Keep your token file and credentials secure — they provide")
-    print("access to your Charles Schwab account data.")
 
     creds = {
         "SCHWAB_APP_KEY": app_key,

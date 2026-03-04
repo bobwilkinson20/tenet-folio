@@ -7,6 +7,7 @@ import pytest
 from dotenv import load_dotenv
 
 from integrations.schwab_client import SchwabClient
+from services.credential_manager import get_credential
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -25,12 +26,11 @@ def load_test_env():
 def schwab_client(load_test_env) -> SchwabClient:
     """Create a real SchwabClient using test credentials.
 
-    Requires SCHWAB_APP_KEY, SCHWAB_APP_SECRET, and SCHWAB_TOKEN_PATH
-    to be set in .env.test.  The token file must exist on disk.
+    Requires SCHWAB_APP_KEY and SCHWAB_APP_SECRET to be set in .env.test,
+    and SCHWAB_TOKEN to be stored in Keychain.
     """
     app_key = os.getenv("SCHWAB_APP_KEY")
     app_secret = os.getenv("SCHWAB_APP_SECRET")
-    token_path = os.getenv("SCHWAB_TOKEN_PATH")
 
     if not app_key or not app_secret:
         pytest.skip(
@@ -38,14 +38,13 @@ def schwab_client(load_test_env) -> SchwabClient:
             "set SCHWAB_APP_KEY and SCHWAB_APP_SECRET in .env.test"
         )
 
-    if not token_path or not Path(token_path).exists():
+    if not get_credential("SCHWAB_TOKEN"):
         pytest.skip(
-            "Schwab token file not found: "
-            "set SCHWAB_TOKEN_PATH in .env.test and ensure the file exists"
+            "Schwab token not found in Keychain: "
+            "run setup_schwab.py first"
         )
 
     return SchwabClient(
         app_key=app_key,
         app_secret=app_secret,
-        token_path=token_path,
     )

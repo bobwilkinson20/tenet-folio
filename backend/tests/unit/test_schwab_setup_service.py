@@ -133,14 +133,15 @@ class TestSchwabRemoveCredentials:
     """Tests for remove_credentials('Schwab')."""
 
     @patch("services.provider_setup.registry.delete_credential", return_value=True)
-    def test_removes_three_keys(self, mock_delete):
-        """Removes SCHWAB_APP_KEY, SCHWAB_APP_SECRET, and SCHWAB_CALLBACK_URL."""
+    def test_removes_credentials_and_token(self, mock_delete):
+        """Removes SCHWAB_APP_KEY, SCHWAB_APP_SECRET, SCHWAB_CALLBACK_URL, and SCHWAB_TOKEN."""
         result = remove_credentials("Schwab")
 
-        assert mock_delete.call_count == 3
+        assert mock_delete.call_count == 4
         mock_delete.assert_any_call("SCHWAB_APP_KEY")
         mock_delete.assert_any_call("SCHWAB_APP_SECRET")
         mock_delete.assert_any_call("SCHWAB_CALLBACK_URL")
+        mock_delete.assert_any_call("SCHWAB_TOKEN")
         assert "removed" in result.lower()
 
 

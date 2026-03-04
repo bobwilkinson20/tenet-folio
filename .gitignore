@@ -56,9 +56,6 @@ alembic/versions/__pycache__/
 # Coinbase CDP API key files
 cdp_api_key*.json
 
-# Charles Schwab OAuth token file
-.schwab_token.json
-
 # TLS certificates (mkcert)
 .certs/
 

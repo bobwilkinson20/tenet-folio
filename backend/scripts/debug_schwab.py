@@ -60,12 +60,12 @@ def main():
     client = SchwabClient()
 
     if not client.is_configured():
-        print("Schwab is not configured. Check .env credentials and token file.")
+        print("Schwab is not configured. Check .env credentials and Keychain token.")
         print()
         print("Required settings:")
         print("  SCHWAB_APP_KEY=<your app key>")
         print("  SCHWAB_APP_SECRET=<your app secret>")
-        print("  SCHWAB_TOKEN_PATH=<path to .schwab_token.json>")
+        print("  SCHWAB_TOKEN must be stored in Keychain (run setup_schwab.py)")
         return
 
     schwab = client._get_client()

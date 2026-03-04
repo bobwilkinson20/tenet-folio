@@ -288,13 +288,16 @@ To configure Charles Schwab via the schwab-py library:
 cd backend
 uv run python scripts/setup_schwab.py
 # Follow prompts to complete the OAuth flow
-# Add SCHWAB_APP_KEY, SCHWAB_APP_SECRET, and SCHWAB_TOKEN_PATH to your .env file
+# Add SCHWAB_APP_KEY and SCHWAB_APP_SECRET to your .env file (or store in Keychain)
+# OAuth token is stored automatically in macOS Keychain
 ```
 
 **Prerequisites:**
 1. Register at https://developer.schwab.com/ and create an app
 2. Wait for the app status to change from "Approved - Pending" to "Ready for Use" (requires manual approval by Schwab)
 3. Note your App Key, App Secret, and Callback URL from the app dashboard
+
+**Token storage:** The OAuth token is stored in macOS Keychain as `SCHWAB_TOKEN` (per-profile isolated).
 
 **Token refresh:** Schwab refresh tokens expire after ~7 days. Re-authenticate by running:
 ```bash
@@ -473,7 +476,7 @@ All enhancements should follow this branch/PR workflow:
 
 6. **Merge** the PR into `main` using **"Squash and merge"** (not a regular merge commit). This keeps `main` history linear with one commit per PR. When using `gh pr merge`, pass the `--squash` flag:
    ```bash
-   gh pr merge --squash
+   gh pr merge --squash --delete-branch
    ```
 
 ## Changelog

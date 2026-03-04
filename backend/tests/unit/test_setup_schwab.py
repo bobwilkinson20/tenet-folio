@@ -1,26 +1,13 @@
 """Tests for the Charles Schwab setup and token refresh scripts."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.setup_schwab import (
-    get_default_token_path,
     run_oauth_flow,
     validate_client,
 )
-
-
-class TestGetDefaultTokenPath:
-    """Tests for get_default_token_path."""
-
-    def test_returns_path_in_backend_dir(self):
-        """Path ends with .schwab_token.json in the backend directory."""
-        path = get_default_token_path()
-        assert path.endswith(".schwab_token.json")
-        # Should be in the backend directory (parent of scripts/)
-        assert Path(path).parent.name == "backend" or "backend" in path
 
 
 class TestRunOauthFlow:
@@ -36,14 +23,16 @@ class TestRunOauthFlow:
             app_key="my-key",
             app_secret="my-secret",
             callback_url="https://127.0.0.1",
-            token_path="/tmp/token.json",
         )
+
+        from integrations.schwab_client import write_token_to_keychain
 
         mock_auth.assert_called_once_with(
             api_key="my-key",
             app_secret="my-secret",
             callback_url="https://127.0.0.1",
-            token_path="/tmp/token.json",
+            token_write_func=write_token_to_keychain,
+            token_path="<keychain>",
         )
         assert result is mock_client
 
@@ -53,7 +42,7 @@ class TestRunOauthFlow:
         mock_auth.side_effect = Exception("OAuth error")
 
         with pytest.raises(Exception, match="OAuth error"):
-            run_oauth_flow("key", "secret", "https://cb", "/tmp/token.json")
+            run_oauth_flow("key", "secret", "https://cb")
 
 
 class TestValidateClient:
@@ -111,7 +100,6 @@ class TestMainFlow:
             "my-app-key",
             "my-app-secret",
             "",  # default callback URL
-            "",  # default token path
             "n",  # decline keychain storage
         ]
         mock_client = MagicMock()
@@ -127,7 +115,8 @@ class TestMainFlow:
         captured = capsys.readouterr()
         assert "SCHWAB_APP_KEY=my-app-key" in captured.out
         assert "SCHWAB_APP_SECRET=my-app-secret" in captured.out
-        assert "SCHWAB_TOKEN_PATH=" in captured.out
+        assert "SCHWAB_TOKEN_PATH" not in captured.out
+        assert "Keychain" in captured.out
         assert "7 days" in captured.out
         assert "Account 12345" in captured.out
 
@@ -163,7 +152,7 @@ class TestMainFlow:
         self, mock_input, _mock_get, mock_oauth, mock_validate, capsys
     ):
         """Empty callback input uses default URL."""
-        mock_input.side_effect = ["key", "secret", "", "", "n"]
+        mock_input.side_effect = ["key", "secret", "", "n"]
         mock_oauth.return_value = MagicMock()
         mock_validate.return_value = []
 
@@ -180,27 +169,6 @@ class TestMainFlow:
     @patch("scripts.setup_schwab.run_oauth_flow")
     @patch("scripts.setup_schwab._get_setting", return_value="")
     @patch("builtins.input")
-    def test_default_token_path_used(
-        self, mock_input, _mock_get, mock_oauth, mock_validate, capsys
-    ):
-        """Empty token path input uses default path."""
-        mock_input.side_effect = ["key", "secret", "", "", "n"]
-        mock_oauth.return_value = MagicMock()
-        mock_validate.return_value = []
-
-        from scripts.setup_schwab import main
-
-        main()
-
-        mock_oauth.assert_called_once()
-        args, kwargs = mock_oauth.call_args
-        # token_path is the 4th positional arg
-        assert args[3].endswith(".schwab_token.json")
-
-    @patch("scripts.setup_schwab.validate_client")
-    @patch("scripts.setup_schwab.run_oauth_flow")
-    @patch("scripts.setup_schwab._get_setting", return_value="")
-    @patch("builtins.input")
     def test_non_default_callback_included_in_output(
         self, mock_input, _mock_get, mock_oauth, mock_validate, capsys
     ):
@@ -209,7 +177,6 @@ class TestMainFlow:
             "key",
             "secret",
             "https://custom:9999",
-            "",
             "n",  # decline keychain storage
         ]
         mock_oauth.return_value = MagicMock()
@@ -230,7 +197,7 @@ class TestMainFlow:
         self, mock_input, _mock_get, mock_oauth, mock_validate, capsys
     ):
         """Default callback URL is omitted from env output."""
-        mock_input.side_effect = ["key", "secret", "", "", "n"]
+        mock_input.side_effect = ["key", "secret", "", "n"]
         mock_oauth.return_value = MagicMock()
         mock_validate.return_value = []
 
@@ -248,7 +215,7 @@ class TestMainFlow:
         self, mock_input, mock_oauth, _mock_get, capsys
     ):
         """OAuth failure prints error and common issues."""
-        mock_input.side_effect = ["key", "secret", "", ""]
+        mock_input.side_effect = ["key", "secret", ""]
         mock_oauth.side_effect = Exception("OAuth failed")
 
         from scripts.setup_schwab import main
@@ -271,7 +238,6 @@ class TestMainFlow:
         mock_input.side_effect = [
             "y",   # use stored credentials
             "",    # default callback URL
-            "",    # default token path
             "n",   # decline keychain storage
         ]
         mock_oauth.return_value = MagicMock()
@@ -283,7 +249,6 @@ class TestMainFlow:
             "SCHWAB_APP_KEY": "stored-key",
             "SCHWAB_APP_SECRET": "stored-secret",
             "SCHWAB_CALLBACK_URL": "",
-            "SCHWAB_TOKEN_PATH": "",
         }
         with patch("scripts.setup_schwab._get_setting", side_effect=lambda k: stored.get(k, "")):
             from scripts.setup_schwab import main
@@ -311,7 +276,6 @@ class TestMainFlow:
             "new-key",     # manual App Key
             "new-secret",  # manual App Secret
             "",            # default callback URL
-            "",            # default token path
             "n",           # decline keychain storage
         ]
         mock_oauth.return_value = MagicMock()
@@ -321,7 +285,6 @@ class TestMainFlow:
             "SCHWAB_APP_KEY": "stored-key",
             "SCHWAB_APP_SECRET": "stored-secret",
             "SCHWAB_CALLBACK_URL": "",
-            "SCHWAB_TOKEN_PATH": "",
         }
         with patch("scripts.setup_schwab._get_setting", side_effect=lambda k: stored.get(k, "")):
             from scripts.setup_schwab import main
@@ -344,7 +307,6 @@ class TestRefreshMainFlow:
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
         mock_settings.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
 
         mock_client = MagicMock()
         mock_oauth.return_value = mock_client
@@ -360,7 +322,7 @@ class TestRefreshMainFlow:
         captured = capsys.readouterr()
         assert "2 account(s)" in captured.out
         assert "Success" in captured.out
-        assert "/tmp/token.json" in captured.out
+        assert "Keychain" in captured.out
 
     @patch("scripts.refresh_schwab_token.settings")
     def test_missing_credentials_exits(self, mock_settings):
@@ -383,8 +345,6 @@ class TestRefreshMainFlow:
         mock_settings.SCHWAB_APP_KEY = "my-key"
         mock_settings.SCHWAB_APP_SECRET = "my-secret"
         mock_settings.SCHWAB_CALLBACK_URL = "https://127.0.0.1"
-        mock_settings.SCHWAB_TOKEN_PATH = "/tmp/token.json"
-
         mock_oauth.side_effect = Exception("Token expired")
 
         from scripts.refresh_schwab_token import main
