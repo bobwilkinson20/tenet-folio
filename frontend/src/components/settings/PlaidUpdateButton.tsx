@@ -74,7 +74,7 @@ export function PlaidUpdateButton({ itemId, onSuccess }: PlaidUpdateButtonProps)
     <div>
       <button
         onClick={fetchUpdateToken}
-        disabled={loading}
+        disabled={loading || !!linkToken}
         className="rounded-md bg-tf-accent-primary px-2 py-1 text-xs font-medium text-white hover:bg-tf-accent-primary/90 disabled:opacity-50"
       >
         {loading ? "Loading..." : "Update"}

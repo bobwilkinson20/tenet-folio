@@ -284,7 +284,8 @@ class PlaidClient:
                     "Failed to fetch activities from %s: %s",
                     institution_name, e,
                 )
-                # Capture activity-level auth errors too (e.g. ITEM_LOGIN_REQUIRED)
+                # Capture activity-level auth errors only if holdings didn't
+                # already fail — avoids double-reporting the same item error.
                 if item_id not in pending_errors:
                     code, msg = self._extract_plaid_error_details(e)
                     pending_errors[item_id] = (code, msg)
