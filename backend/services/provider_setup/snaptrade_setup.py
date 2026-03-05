@@ -88,7 +88,7 @@ def _validate_with_user_secret(
         )
     except Exception as exc:
         error_msg = str(exc).lower()
-        if "unauthorized" in error_msg or "403" in error_msg or "401" in error_msg:
+        if any(s in error_msg for s in ("unauthorized", "403", "401", "404", "not found")):
             raise ValueError(
                 "Invalid credentials: the Client ID / Consumer Key don't match "
                 "the existing user, or the User Secret is incorrect."
@@ -195,7 +195,10 @@ def validate(
             message="SnapTrade configured successfully. Existing user preserved."
         )
 
-    # Path 2: User secret provided in form (existing user, no local creds)
+    # Path 2: User secret provided in form (existing user, no local creds).
+    # Note: if store_credentials succeeds but _store_user_credentials fails,
+    # the app will have API creds but no user creds.  Re-running setup with
+    # the same form values will recover (Path 2 again).
     if form_user_secret:
         user_id = form_user_id or _DEFAULT_USER_ID
         _validate_with_user_secret(client, user_id, form_user_secret)

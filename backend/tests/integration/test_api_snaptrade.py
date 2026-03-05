@@ -143,6 +143,21 @@ class TestCreateConnectUrl:
         finally:
             _cleanup()
 
+    def test_handles_login_redirect_uri_key(self):
+        """Handles 'loginRedirectURI' key in response."""
+        sdk = _MockSDK()
+        mock_response = MagicMock()
+        mock_response.body = {"loginRedirectURI": "https://app.snaptrade.com/connect?token=ghi"}
+        sdk.client.authentication.login_snap_trade_user.return_value = mock_response
+
+        client = _make_client(sdk)
+        try:
+            response = client.post("/api/snaptrade/connect-url")
+            assert response.status_code == 200
+            assert "token=ghi" in response.json()["redirect_url"]
+        finally:
+            _cleanup()
+
     def test_sdk_error(self):
         """SDK error returns 500."""
         sdk = _MockSDK()
