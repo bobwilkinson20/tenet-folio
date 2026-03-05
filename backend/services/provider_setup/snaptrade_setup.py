@@ -33,7 +33,8 @@ FIELDS: list[ProviderFieldDef] = [
         "help_text": (
             f'Defaults to "{_DEFAULT_USER_ID}". '
             "Change this if you registered with a different user ID "
-            "(e.g., per-profile IDs like portfolio-paper)."
+            "(e.g., per-profile IDs like portfolio-paper). "
+            "If reconnecting an existing user, also provide User Secret."
         ),
         "input_type": "text",
         "required": False,

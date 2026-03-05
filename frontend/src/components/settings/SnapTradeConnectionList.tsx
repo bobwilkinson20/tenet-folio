@@ -42,13 +42,16 @@ export function SnapTradeConnectionList() {
     setConnecting(true);
     // Open window synchronously to avoid popup blocker (Safari)
     const authWindow = window.open("about:blank", "_blank");
+    if (!authWindow) {
+      setActionError("Popup blocked. Please allow popups for this page and try again.");
+      setConnecting(false);
+      return;
+    }
     try {
       const response = await snaptradeApi.getConnectUrl();
-      if (authWindow) {
-        authWindow.location.href = response.data.redirect_url;
-      }
+      authWindow.location.href = response.data.redirect_url;
     } catch {
-      if (authWindow) authWindow.close();
+      authWindow.close();
       setActionError("Failed to generate connection URL.");
     } finally {
       setConnecting(false);
@@ -83,14 +86,17 @@ export function SnapTradeConnectionList() {
     setActionError(null);
     // Open window synchronously to avoid popup blocker (Safari)
     const authWindow = window.open("about:blank", "_blank");
+    if (!authWindow) {
+      setActionError("Popup blocked. Please allow popups for this page and try again.");
+      setRefreshingId(null);
+      return;
+    }
     try {
       const response =
         await snaptradeApi.refreshConnection(authorizationId);
-      if (authWindow) {
-        authWindow.location.href = response.data.redirect_url;
-      }
+      authWindow.location.href = response.data.redirect_url;
     } catch {
-      if (authWindow) authWindow.close();
+      authWindow.close();
       setActionError("Failed to generate reconnect URL. Please try again.");
     } finally {
       setRefreshingId(null);

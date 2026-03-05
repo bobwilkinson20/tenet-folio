@@ -129,6 +129,26 @@ describe("SnapTradeConnectionList", () => {
     expect(mockOpen).toHaveBeenCalledWith("about:blank", "_blank");
   });
 
+  it("shows error when popup is blocked", async () => {
+    vi.stubGlobal("open", vi.fn().mockReturnValue(null));
+
+    render(<SnapTradeConnectionList />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Add Connection" }),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Connection" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Popup blocked/)).toBeInTheDocument();
+    });
+
+    expect(mockedGetConnectUrl).not.toHaveBeenCalled();
+  });
+
   it("shows error when Add Connection fails", async () => {
     const mockOpen = vi.fn().mockReturnValue({ close: vi.fn() });
     vi.stubGlobal("open", mockOpen);
