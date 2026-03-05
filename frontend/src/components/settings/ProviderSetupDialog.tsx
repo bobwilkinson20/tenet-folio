@@ -151,7 +151,7 @@ export function ProviderSetupDialog({
                   onChange={(e) => handleFieldChange(field.key, e.target.value)}
                   className="w-full rounded border border-tf-border-default bg-tf-bg-base px-3 py-2 text-sm text-tf-text-primary focus:border-tf-accent-primary focus:outline-none"
                   rows={4}
-                  required={field.required !== false}
+                  required={field.required ?? true}
                 />
               ) : field.input_type === "select" ? (
                 <select
@@ -159,7 +159,7 @@ export function ProviderSetupDialog({
                   value={values[field.key] ?? ""}
                   onChange={(e) => handleFieldChange(field.key, e.target.value)}
                   className="w-full rounded border border-tf-border-default bg-tf-bg-base px-3 py-2 text-sm text-tf-text-primary focus:border-tf-accent-primary focus:outline-none"
-                  required={field.required !== false}
+                  required={field.required ?? true}
                 >
                   {field.options?.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -174,7 +174,7 @@ export function ProviderSetupDialog({
                   value={values[field.key] ?? ""}
                   onChange={(e) => handleFieldChange(field.key, e.target.value)}
                   className="w-full rounded border border-tf-border-default bg-tf-bg-base px-3 py-2 text-sm text-tf-text-primary focus:border-tf-accent-primary focus:outline-none"
-                  required={field.required !== false}
+                  required={field.required ?? true}
                 />
               )}
               {field.help_text && (

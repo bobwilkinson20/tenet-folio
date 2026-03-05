@@ -30,17 +30,15 @@ class _SnapTradeSDK:
         client_id = get_credential("SNAPTRADE_CLIENT_ID")
         consumer_key = get_credential("SNAPTRADE_CONSUMER_KEY")
         if not client_id or not consumer_key:
-            raise HTTPException(
-                status_code=400,
-                detail="SnapTrade is not configured. Set up credentials first.",
+            raise ValueError(
+                "SnapTrade is not configured. Set up credentials first."
             )
 
         self.user_id = get_credential("SNAPTRADE_USER_ID") or ""
         self.user_secret = get_credential("SNAPTRADE_USER_SECRET") or ""
         if not self.user_id or not self.user_secret:
-            raise HTTPException(
-                status_code=400,
-                detail="SnapTrade user not registered. Run setup first.",
+            raise ValueError(
+                "SnapTrade user not registered. Run setup first."
             )
 
         from snaptrade_client import SnapTrade
@@ -50,7 +48,10 @@ class _SnapTradeSDK:
 
 def _get_sdk() -> _SnapTradeSDK:
     """Dependency for injecting the SnapTrade SDK (overridable in tests)."""
-    return _SnapTradeSDK()
+    try:
+        return _SnapTradeSDK()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ------------------------------------------------------------------

@@ -53,10 +53,11 @@ FIELDS: list[ProviderFieldDef] = [
     },
 ]
 
-# The first two fields are the API credentials stored by store_credentials().
-# user_id and user_secret are handled separately since they may come from
-# registration or Keychain.
-_API_FIELDS: list[ProviderFieldDef] = FIELDS[:2]
+# API credentials stored by store_credentials().  user_id and user_secret are
+# handled separately since they may come from registration or Keychain.
+_API_FIELDS: list[ProviderFieldDef] = [
+    f for f in FIELDS if f["key"] in ("client_id", "consumer_key")
+]
 
 
 def _get_attr(obj: object, key: str, default: object = None) -> object:
@@ -128,7 +129,12 @@ def _register_user(client: object, user_id: str) -> str:
 
 
 def _store_user_credentials(user_id: str, user_secret: str) -> None:
-    """Store USER_ID and USER_SECRET in Keychain and sync settings."""
+    """Store USER_ID and USER_SECRET in Keychain and sync settings.
+
+    If this fails after a successful registration, the SnapTrade user exists
+    but the app has no local record.  Recovery: re-run setup with the user_id
+    and user_secret from the original registration in the optional fields.
+    """
     if not set_credential("SNAPTRADE_USER_ID", user_id):
         raise RuntimeError("Failed to store SNAPTRADE_USER_ID in Keychain.")
     sync_setting("SNAPTRADE_USER_ID", user_id)
@@ -171,7 +177,10 @@ def validate(
 
     client = SnapTrade(consumer_key=consumer_key, client_id=client_id)
 
-    # Path 1: Existing user credentials in Keychain
+    # Path 1: Existing user credentials in Keychain.
+    # When Keychain already has USER_ID/USER_SECRET, we use those and ignore
+    # any form-provided user_id/user_secret.  To change the stored user, the
+    # user should first remove credentials via the UI, then re-setup.
     existing_user_id = get_credential("SNAPTRADE_USER_ID")
     existing_user_secret = get_credential("SNAPTRADE_USER_SECRET")
 
