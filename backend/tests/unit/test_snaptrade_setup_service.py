@@ -266,6 +266,28 @@ class TestSnapTradeSetup:
             )
 
     @patch("services.provider_setup.snaptrade_setup.get_credential", return_value=None)
+    @patch("services.provider_setup.base.set_credential", return_value=True)
+    @patch("services.provider_setup.snaptrade_setup.set_credential")
+    @patch("snaptrade_client.SnapTrade")
+    def test_keychain_failure_user_secret(
+        self, mock_snaptrade_cls, mock_set_cred_direct, mock_set_cred_base, mock_get_cred
+    ):
+        """Keychain failure storing USER_SECRET (after USER_ID succeeds) raises RuntimeError."""
+        mock_client = MagicMock()
+        mock_snaptrade_cls.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.body = {"userSecret": "secret123"}
+        mock_client.authentication.register_snap_trade_user.return_value = mock_response
+
+        # USER_ID write succeeds, USER_SECRET write fails
+        mock_set_cred_direct.side_effect = [True, False]
+
+        with pytest.raises(RuntimeError, match="Failed to store SNAPTRADE_USER_SECRET"):
+            validate_and_store(
+                "SnapTrade", {"client_id": "cid", "consumer_key": "ckey"}
+            )
+
+    @patch("services.provider_setup.snaptrade_setup.get_credential", return_value=None)
     @patch("services.provider_setup.base.set_credential", return_value=False)
     @patch("snaptrade_client.SnapTrade")
     def test_keychain_failure_api_creds(self, mock_snaptrade_cls, mock_set_cred_base, mock_get_cred):

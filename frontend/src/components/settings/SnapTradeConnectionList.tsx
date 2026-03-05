@@ -164,6 +164,7 @@ export function SnapTradeConnectionList() {
                 <button
                   onClick={() => handleRefresh(conn.authorization_id)}
                   disabled={refreshingId === conn.authorization_id}
+                  aria-label={`Update ${conn.name || conn.brokerage_name}`}
                   className="rounded border border-tf-border-default px-2 py-1 text-xs text-tf-text-secondary hover:bg-tf-bg-elevated disabled:opacity-50"
                 >
                   {refreshingId === conn.authorization_id
@@ -178,6 +179,7 @@ export function SnapTradeConnectionList() {
                     )
                   }
                   disabled={removingId === conn.authorization_id}
+                  aria-label={`Remove ${conn.name || conn.brokerage_name}`}
                   className="text-xs text-tf-negative hover:underline disabled:opacity-50"
                 >
                   {removingId === conn.authorization_id

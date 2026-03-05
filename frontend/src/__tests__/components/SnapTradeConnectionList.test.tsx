@@ -182,8 +182,8 @@ describe("SnapTradeConnectionList", () => {
       expect(screen.getByText("My Alpaca")).toBeInTheDocument();
     });
 
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    const removeButton = screen.getByRole("button", { name: "Remove My Alpaca" });
+    fireEvent.click(removeButton);
 
     expect(window.confirm).toHaveBeenCalledWith(
       expect.stringContaining("Remove My Alpaca"),
@@ -208,8 +208,8 @@ describe("SnapTradeConnectionList", () => {
       expect(screen.getByText("My Alpaca")).toBeInTheDocument();
     });
 
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    const removeButton = screen.getByRole("button", { name: "Remove My Alpaca" });
+    fireEvent.click(removeButton);
 
     expect(mockedRemoveConnection).not.toHaveBeenCalled();
   });
@@ -224,8 +224,8 @@ describe("SnapTradeConnectionList", () => {
       expect(screen.getByText("My Alpaca")).toBeInTheDocument();
     });
 
-    const removeButtons = screen.getAllByRole("button", { name: "Remove" });
-    fireEvent.click(removeButtons[0]);
+    const removeButton = screen.getByRole("button", { name: "Remove My Alpaca" });
+    fireEvent.click(removeButton);
 
     await waitFor(() => {
       expect(
@@ -251,8 +251,8 @@ describe("SnapTradeConnectionList", () => {
       expect(screen.getByText("My Alpaca")).toBeInTheDocument();
     });
 
-    const updateButtons = screen.getAllByRole("button", { name: "Update" });
-    fireEvent.click(updateButtons[0]);
+    const updateButton = screen.getByRole("button", { name: "Update My Alpaca" });
+    fireEvent.click(updateButton);
 
     await waitFor(() => {
       expect(mockedRefreshConnection).toHaveBeenCalledWith("auth-1");
@@ -273,8 +273,8 @@ describe("SnapTradeConnectionList", () => {
       expect(screen.getByText("My Alpaca")).toBeInTheDocument();
     });
 
-    const updateButtons = screen.getAllByRole("button", { name: "Update" });
-    fireEvent.click(updateButtons[0]);
+    const updateButton = screen.getByRole("button", { name: "Update My Alpaca" });
+    fireEvent.click(updateButton);
 
     await waitFor(() => {
       expect(
