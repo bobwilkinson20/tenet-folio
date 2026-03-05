@@ -36,10 +36,21 @@ class TestGetSetupInfo:
         response = client.get("/api/providers/FakeProvider/setup-info")
         assert response.status_code == 404
 
-    def test_provider_without_setup_404(self, client):
-        """Known provider without setup config returns 404."""
+    def test_returns_snaptrade_fields(self, client):
+        """Returns field definitions for SnapTrade with optional flags."""
         response = client.get("/api/providers/SnapTrade/setup-info")
-        assert response.status_code == 404
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data) == 4
+        assert data[0]["key"] == "client_id"
+        assert data[0]["required"] is True
+        assert data[1]["key"] == "consumer_key"
+        assert data[1]["required"] is True
+        assert data[2]["key"] == "user_id"
+        assert data[2]["required"] is False
+        assert data[3]["key"] == "user_secret"
+        assert data[3]["required"] is False
 
 
 class TestSetupProvider:
@@ -121,7 +132,11 @@ class TestRemoveCredentials:
         response = client.delete("/api/providers/FakeProvider/credentials")
         assert response.status_code == 404
 
-    def test_provider_without_setup_404(self, client):
-        """Known provider without credential config returns 404."""
+    @patch("services.provider_setup.registry.delete_credential", return_value=True)
+    def test_remove_snaptrade_credentials(self, mock_delete, client):
+        """SnapTrade credential removal succeeds and cleans up user keys."""
         response = client.delete("/api/providers/SnapTrade/credentials")
-        assert response.status_code == 404
+        assert response.status_code == 200
+        assert "removed" in response.json()["message"].lower()
+        # Should delete CLIENT_ID, CONSUMER_KEY, USER_ID, USER_SECRET
+        assert mock_delete.call_count == 4

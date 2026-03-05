@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import accounts, asset_classes, config, dashboard, lots, market_data, plaid, portfolio, preferences, providers, reports, schwab, securities, sync
+from api import accounts, asset_classes, config, dashboard, lots, market_data, plaid, portfolio, preferences, providers, reports, schwab, securities, snaptrade, sync
 from config import settings
 from database import get_session_local
 from logging_config import setup_logging
@@ -127,6 +127,7 @@ app.include_router(sync.router)
 app.include_router(preferences.router)
 app.include_router(plaid.router)
 app.include_router(schwab.router)
+app.include_router(snaptrade.router)
 app.include_router(providers.router)
 app.include_router(reports.router)
 app.include_router(config.router)
