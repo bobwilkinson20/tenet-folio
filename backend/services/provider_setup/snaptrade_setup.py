@@ -138,10 +138,12 @@ def _store_user_credentials(user_id: str, user_secret: str) -> None:
     """
     if not set_credential("SNAPTRADE_USER_ID", user_id):
         raise RuntimeError("Failed to store SNAPTRADE_USER_ID in Keychain.")
-    sync_setting("SNAPTRADE_USER_ID", user_id)
-
     if not set_credential("SNAPTRADE_USER_SECRET", user_secret):
         raise RuntimeError("Failed to store SNAPTRADE_USER_SECRET in Keychain.")
+
+    # Sync in-memory settings only after both writes succeed to avoid
+    # a partial state where USER_ID is in memory but USER_SECRET is not.
+    sync_setting("SNAPTRADE_USER_ID", user_id)
     sync_setting("SNAPTRADE_USER_SECRET", user_secret)
 
 

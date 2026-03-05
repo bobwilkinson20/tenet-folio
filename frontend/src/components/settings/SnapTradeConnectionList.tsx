@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { snaptradeApi } from "@/api/snaptrade";
 import type { SnapTradeConnection } from "@/api/snaptrade";
 
@@ -10,6 +10,7 @@ export function SnapTradeConnectionList() {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const oauthPending = useRef(false);
 
   const fetchConnections = useCallback(async () => {
     try {
@@ -31,7 +32,10 @@ export function SnapTradeConnectionList() {
   // Auto-refresh when user returns from brokerage OAuth tab
   useEffect(() => {
     const handleFocus = () => {
-      fetchConnections();
+      if (oauthPending.current) {
+        oauthPending.current = false;
+        fetchConnections();
+      }
     };
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
@@ -50,6 +54,7 @@ export function SnapTradeConnectionList() {
     try {
       const response = await snaptradeApi.getConnectUrl();
       authWindow.location.href = response.data.redirect_url;
+      oauthPending.current = true;
     } catch {
       authWindow.close();
       setActionError("Failed to generate connection URL.");
@@ -95,6 +100,7 @@ export function SnapTradeConnectionList() {
       const response =
         await snaptradeApi.refreshConnection(authorizationId);
       authWindow.location.href = response.data.redirect_url;
+      oauthPending.current = true;
     } catch {
       authWindow.close();
       setActionError("Failed to generate reconnect URL. Please try again.");
