@@ -285,6 +285,25 @@ describe("SnapTradeConnectionList", () => {
     });
   });
 
+  it("shows error when Update popup is blocked", async () => {
+    vi.stubGlobal("open", vi.fn().mockReturnValue(null));
+
+    render(<SnapTradeConnectionList />);
+
+    await waitFor(() => {
+      expect(screen.getByText("My Alpaca")).toBeInTheDocument();
+    });
+
+    const updateButton = screen.getByRole("button", { name: "Update My Alpaca" });
+    fireEvent.click(updateButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Popup blocked/)).toBeInTheDocument();
+    });
+
+    expect(mockedRefreshConnection).not.toHaveBeenCalled();
+  });
+
   it("shows brokerage name as subtitle when different from name", async () => {
     render(<SnapTradeConnectionList />);
 
