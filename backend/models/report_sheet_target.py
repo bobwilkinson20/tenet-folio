@@ -40,4 +40,4 @@ class ReportSheetTarget(Base):
     @config_dict.setter
     def config_dict(self, value: dict) -> None:
         """Serialize a Python dict into the JSON config column."""
-        self.config = json.dumps(value)
+        self.config = json.dumps(value or {})
