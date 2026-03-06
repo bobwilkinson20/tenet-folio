@@ -2,7 +2,6 @@
 
 import json
 import logging
-from typing import Optional
 
 import gspread
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -104,7 +103,11 @@ def set_credentials(body: GoogleSheetsCredentialSetRequest):
 @router.delete("/credentials", status_code=204)
 def remove_credentials():
     """Remove Google Sheets credentials from keychain."""
-    delete_credential("GOOGLE_SHEETS_CREDENTIALS")
+    if not delete_credential("GOOGLE_SHEETS_CREDENTIALS"):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to remove credentials from keychain.",
+        )
     settings.GOOGLE_SHEETS_CREDENTIALS = ""
     logger.info("Google Sheets credentials removed")
 
@@ -148,7 +151,7 @@ def _target_to_response(target: ReportSheetTarget) -> ReportSheetTargetResponse:
 
 @router.get("/targets", response_model=list[ReportSheetTargetResponse])
 def list_targets(
-    report_type: Optional[str] = Query(None),
+    report_type: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """List all sheet targets, optionally filtered by report type."""

@@ -162,12 +162,27 @@ class TestDeleteCredentials:
         client = _make_client(db)
         try:
             with (
-                patch("api.reports_config.delete_credential"),
+                patch("api.reports_config.delete_credential", return_value=True),
                 patch("api.reports_config.settings") as mock_settings,
             ):
                 mock_settings.GOOGLE_SHEETS_CREDENTIALS = "some-creds"
                 response = client.delete("/api/reports/config/credentials")
             assert response.status_code == 204
+        finally:
+            _cleanup_overrides()
+
+    def test_keychain_failure(self, db):
+        """Returns 500 when keychain deletion fails."""
+        client = _make_client(db)
+        try:
+            with (
+                patch("api.reports_config.delete_credential", return_value=False),
+                patch("api.reports_config.settings") as mock_settings,
+            ):
+                mock_settings.GOOGLE_SHEETS_CREDENTIALS = "some-creds"
+                response = client.delete("/api/reports/config/credentials")
+            assert response.status_code == 500
+            assert "keychain" in response.json()["detail"].lower()
         finally:
             _cleanup_overrides()
 
