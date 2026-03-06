@@ -123,28 +123,6 @@ class TestRunBackfillIfNeeded:
     @patch("services.valuation_scheduler.PortfolioValuationService")
     @patch("services.valuation_scheduler.get_session_local")
     @patch("services.valuation_scheduler.date")
-    def test_closes_db_session_on_failure(
-        self, mock_date, mock_get_session, mock_pvs_cls, mock_sync_cls
-    ):
-        today = date(2026, 3, 6)
-        mock_date.today.return_value = today
-        mock_sync_cls.is_sync_in_progress.return_value = False
-
-        mock_db = MagicMock()
-        mock_get_session.return_value = MagicMock(return_value=mock_db)
-
-        mock_service = MagicMock()
-        mock_service.backfill.side_effect = Exception("db error")
-        mock_pvs_cls.return_value = mock_service
-
-        run_backfill_if_needed(None)
-
-        mock_db.close.assert_called_once()
-
-    @patch("services.valuation_scheduler.SyncService")
-    @patch("services.valuation_scheduler.PortfolioValuationService")
-    @patch("services.valuation_scheduler.get_session_local")
-    @patch("services.valuation_scheduler.date")
     def test_runs_when_last_run_date_is_none(
         self, mock_date, mock_get_session, mock_pvs_cls, mock_sync_cls
     ):

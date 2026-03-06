@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
     logger.info("Active profile: %s", ACTIVE_PROFILE or "default")
     SessionLocal = get_session_local()
     db = SessionLocal()
+    startup_backfill_ok = False
     try:
         with _backfill_lock:
             service = PortfolioValuationService()
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
             if result.errors:
                 for error in result.errors:
                     logger.warning("Valuation backfill warning: %s", error)
+            startup_backfill_ok = True
     except Exception:
         logger.warning("Valuation backfill failed on startup", exc_info=True)
 
@@ -101,7 +103,7 @@ async def lifespan(app: FastAPI):
         db.close()
 
     # Start background valuation scheduler
-    startup_date = date.today()
+    startup_date = date.today() if startup_backfill_ok else None
     shutdown_event = asyncio.Event()
     scheduler_task = asyncio.create_task(
         backfill_loop(shutdown_event, startup_date=startup_date)
