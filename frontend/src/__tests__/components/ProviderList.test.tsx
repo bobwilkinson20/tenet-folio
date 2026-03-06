@@ -9,7 +9,7 @@ const mockProviders = [
     is_enabled: true,
     account_count: 2,
     last_sync_time: "2026-01-15T10:00:00Z",
-    supports_setup: false,
+    supports_setup: true,
   },
   {
     name: "SimpleFIN",
@@ -52,6 +52,15 @@ vi.mock("../../api", () => ({
     getSetupInfo: vi.fn(),
     setup: vi.fn(),
     removeCredentials: vi.fn(),
+  },
+}));
+
+vi.mock("../../api/snaptrade", () => ({
+  snaptradeApi: {
+    listConnections: vi.fn().mockResolvedValue({ data: [] }),
+    getConnectUrl: vi.fn(),
+    removeConnection: vi.fn(),
+    refreshConnection: vi.fn(),
   },
 }));
 
@@ -199,9 +208,9 @@ describe("ProviderList", () => {
       expect(screen.getByText("SimpleFIN")).toBeInTheDocument();
     });
 
-    // SimpleFIN and Coinbase have credentials + supports_setup → Reconfigure + Remove each
-    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(2);
+    // SnapTrade, SimpleFIN, and Coinbase have credentials + supports_setup → Reconfigure + Remove each
+    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(3);
   });
 
   it("shows Configure button for unconfigured SimpleFIN", async () => {
@@ -220,16 +229,15 @@ describe("ProviderList", () => {
     expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(3);
   });
 
-  it("does not show setup buttons for non-setup providers", async () => {
+  it("shows setup buttons for all providers with supports_setup", async () => {
     render(<ProviderList />);
 
     await waitFor(() => {
       expect(screen.getByText("SnapTrade")).toBeInTheDocument();
     });
 
-    // SnapTrade has credentials but no in-app setup → no Configure/Reconfigure
-    // SimpleFIN and Coinbase have credentials + supports_setup → Reconfigure/Remove
-    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(2);
+    // SnapTrade, SimpleFIN, and Coinbase have credentials + supports_setup → Reconfigure/Remove
+    expect(screen.getAllByRole("button", { name: "Reconfigure" })).toHaveLength(3);
     // IBKR and Schwab have supports_setup but no credentials → Configure button
     expect(screen.getAllByRole("button", { name: "Configure" })).toHaveLength(2);
   });

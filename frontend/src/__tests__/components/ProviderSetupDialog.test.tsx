@@ -382,6 +382,46 @@ describe("ProviderSetupDialog", () => {
     expect(options[1].textContent).toBe("Production");
   });
 
+  it("renders optional fields without required attribute", async () => {
+    mockedGetSetupInfo.mockResolvedValue({
+      data: [
+        {
+          key: "client_id",
+          label: "Client ID",
+          help_text: "Your client ID",
+          input_type: "password" as const,
+          required: true,
+        },
+        {
+          key: "user_id",
+          label: "User ID (optional)",
+          help_text: "Defaults to portfolio-user",
+          input_type: "text" as const,
+          required: false,
+        },
+      ],
+    } as never);
+
+    render(
+      <ProviderSetupDialog
+        providerName="SnapTrade"
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Client ID")).toBeInTheDocument();
+    });
+
+    const requiredInput = screen.getByLabelText("Client ID");
+    const optionalInput = screen.getByLabelText("User ID (optional)");
+
+    expect(requiredInput).toBeRequired();
+    expect(optionalInput).not.toBeRequired();
+  });
+
   it("shows success without warnings for clean IBKR setup", async () => {
     mockedGetSetupInfo.mockResolvedValue({
       data: [

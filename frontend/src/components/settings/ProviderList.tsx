@@ -9,6 +9,7 @@ import { extractApiErrorMessage } from "@/utils/errors";
 import { PlaidItemList } from "./PlaidItemList";
 import { ProviderSetupDialog } from "./ProviderSetupDialog";
 import { SchwabTokenSection } from "./SchwabTokenSection";
+import { SnapTradeConnectionList } from "./SnapTradeConnectionList";
 
 const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   SnapTrade: "Brokerage aggregator supporting many institutions",
@@ -193,6 +194,9 @@ export function ProviderList() {
               )}
               {provider.name === "Schwab" && provider.has_credentials && (
                 <SchwabTokenSection />
+              )}
+              {provider.name === "SnapTrade" && provider.has_credentials && (
+                <SnapTradeConnectionList />
               )}
               {provider.name === "Plaid" && provider.has_credentials && (
                 <PlaidItemList />

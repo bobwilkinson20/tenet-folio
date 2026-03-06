@@ -6,7 +6,7 @@ from typing import Callable
 from schemas.provider import ProviderCredentialInfo
 from services.credential_manager import delete_credential
 
-from . import coinbase_setup, ibkr_setup, plaid_setup, schwab_setup, simplefin_setup
+from . import coinbase_setup, ibkr_setup, plaid_setup, schwab_setup, simplefin_setup, snaptrade_setup
 from .base import ProviderFieldDef, SetupResult, sync_setting
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Each module must define PROVIDER_NAME, FIELDS, and validate().
 # Accessing these attributes in the comprehensions below guarantees an
 # AttributeError at import time if any are missing — no runtime assertion needed.
-_PROVIDER_MODULES = [simplefin_setup, ibkr_setup, coinbase_setup, schwab_setup, plaid_setup]
+_PROVIDER_MODULES = [simplefin_setup, ibkr_setup, coinbase_setup, schwab_setup, plaid_setup, snaptrade_setup]
 
 # Maps provider name → list of credential field definitions.
 PROVIDER_CREDENTIAL_MAP: dict[str, list[ProviderFieldDef]] = {
@@ -50,6 +50,7 @@ def get_setup_fields(provider_name: str) -> list[ProviderCredentialInfo]:
             label=f["label"],
             help_text=f["help_text"],
             input_type=f["input_type"],
+            required=f.get("required", True),
             options=f.get("options", []),
         )
         for f in fields

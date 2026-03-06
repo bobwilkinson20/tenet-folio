@@ -31,6 +31,7 @@ class _ProviderFieldDefRequired(TypedDict):
 class ProviderFieldDef(_ProviderFieldDefRequired, total=False):
     """Type-safe definition for a provider credential field."""
 
+    required: bool  # Defaults to True in schema serialization
     options: list[dict[str, str]]
 
 

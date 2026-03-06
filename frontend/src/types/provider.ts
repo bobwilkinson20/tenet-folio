@@ -12,6 +12,7 @@ export interface ProviderSetupField {
   label: string;
   help_text: string;
   input_type: "text" | "textarea" | "password" | "select";
+  required?: boolean;
   options?: { value: string; label: string }[];
 }
 

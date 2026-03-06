@@ -51,11 +51,22 @@ class TestGetSetupFields:
         with pytest.raises(ValueError, match="No setup configuration"):
             get_setup_fields("UnknownProvider")
 
-    def test_provider_without_setup_raises(self):
-        """Known provider without setup config raises ValueError."""
-        # SnapTrade is a known provider but has no setup entry
-        with pytest.raises(ValueError, match="No setup configuration"):
-            get_setup_fields("SnapTrade")
+    def test_returns_snaptrade_fields(self):
+        """SnapTrade returns four fields: client_id, consumer_key, user_id, user_secret."""
+        fields = get_setup_fields("SnapTrade")
+        assert len(fields) == 4
+        assert fields[0].key == "client_id"
+        assert fields[0].label == "Client ID"
+        assert fields[0].input_type == "password"
+        assert fields[1].key == "consumer_key"
+        assert fields[1].label == "Consumer Key"
+        assert fields[1].input_type == "password"
+        assert fields[2].key == "user_id"
+        assert "optional" in fields[2].label.lower()
+        assert fields[2].input_type == "text"
+        assert fields[3].key == "user_secret"
+        assert "optional" in fields[3].label.lower()
+        assert fields[3].input_type == "password"
 
 
 class TestValidateAndStore:
