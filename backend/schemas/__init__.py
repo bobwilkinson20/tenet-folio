@@ -55,6 +55,15 @@ from .provider import (
     ProviderStatusResponse,
     ProviderUpdateRequest,
 )
+from .report import (
+    GoogleSheetsCredentialSetRequest,
+    GoogleSheetsCredentialStatus,
+    GoogleSheetsReportResponse,
+    ReportSheetTargetCreateRequest,
+    ReportSheetTargetResponse,
+    ReportSheetTargetUpdateRequest,
+    ReportTypeResponse,
+)
 
 __all__ = [
     "AccountBase",
@@ -103,4 +112,11 @@ __all__ = [
     "LotBatchUpdate",
     "LotDisposalResponse",
     "LotSummaryResponse",
+    "GoogleSheetsCredentialSetRequest",
+    "GoogleSheetsCredentialStatus",
+    "GoogleSheetsReportResponse",
+    "ReportSheetTargetCreateRequest",
+    "ReportSheetTargetResponse",
+    "ReportSheetTargetUpdateRequest",
+    "ReportTypeResponse",
 ]

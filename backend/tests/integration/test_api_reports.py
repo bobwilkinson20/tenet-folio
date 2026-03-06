@@ -35,8 +35,9 @@ def _cleanup_overrides():
     app.dependency_overrides.pop(get_sheets_writer, None)
 
 
-def test_200_success(db):
+def test_200_success(db, create_report_sheet_target):
     """Successful report returns 200 with tab name and row count."""
+    target = create_report_sheet_target()
     rows = [
         ["Account A", "Stocks", "1000.00"],
         ["/", "Bonds", "500.00"],
@@ -45,12 +46,12 @@ def test_200_success(db):
     def mock_generate_rows(db_session, **kwargs):
         return rows
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
         return "2026-02-25 14:30 UTC"
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets")
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 200
         data = response.json()
         assert data["tab_name"] == "2026-02-25 14:30 UTC"
@@ -59,113 +60,180 @@ def test_200_success(db):
         _cleanup_overrides()
 
 
-def test_400_no_data(db):
-    """Returns 400 when no portfolio data is available."""
+def test_404_missing_target(db):
+    """Returns 404 when target_id does not exist."""
+    rows = [["A", "B", "100"]]
 
     def mock_generate_rows(db_session, **kwargs):
-        return []
+        return rows
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
+        return "tab"
+
+    client = _make_client(db, mock_generate_rows, mock_write)
+    try:
+        response = client.post("/api/reports/google-sheets?target_id=nonexistent")
+        assert response.status_code == 404
+        assert "target not found" in response.json()["detail"].lower()
+    finally:
+        _cleanup_overrides()
+
+
+def test_422_missing_target_id(db):
+    """Returns 422 when target_id is not provided."""
+
+    def mock_generate_rows(db_session, **kwargs):
+        return [["A", "B", "100"]]
+
+    def mock_write(r, spreadsheet_id, template_tab):
         return "tab"
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
         response = client.post("/api/reports/google-sheets")
+        assert response.status_code == 422
+    finally:
+        _cleanup_overrides()
+
+
+def test_400_no_data(db, create_report_sheet_target):
+    """Returns 400 when no portfolio data is available."""
+    target = create_report_sheet_target()
+
+    def mock_generate_rows(db_session, **kwargs):
+        return []
+
+    def mock_write(r, spreadsheet_id, template_tab):
+        return "tab"
+
+    client = _make_client(db, mock_generate_rows, mock_write)
+    try:
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 400
         assert "no portfolio data" in response.json()["detail"].lower()
     finally:
         _cleanup_overrides()
 
 
-def test_502_sheets_api_error(db):
+def test_502_sheets_api_error(db, create_report_sheet_target):
     """Returns 502 when Google Sheets API fails."""
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
         raise GoogleSheetsError("API quota exceeded")
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets")
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 502
         assert "failed to write" in response.json()["detail"].lower()
     finally:
         _cleanup_overrides()
 
 
-def test_503_not_configured(db):
+def test_503_not_configured(db, create_report_sheet_target):
     """Returns 503 when Google Sheets is not configured."""
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
 
-    def mock_write(r):
-        raise GoogleSheetsNotConfiguredError("Google Sheets is not configured. Set GOOGLE_SHEETS_CREDENTIALS_FILE.")
+    def mock_write(r, spreadsheet_id, template_tab):
+        raise GoogleSheetsNotConfiguredError("Not configured")
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets")
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 503
         assert "not configured" in response.json()["detail"].lower()
     finally:
         _cleanup_overrides()
 
 
-def test_500_generate_failure(db):
+def test_500_generate_failure(db, create_report_sheet_target):
     """Returns 500 when row generation fails unexpectedly."""
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         raise RuntimeError("Unexpected DB error")
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
         return "tab"
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets")
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 500
         assert "failed to generate" in response.json()["detail"].lower()
     finally:
         _cleanup_overrides()
 
 
-def test_allocation_only_passed_to_generator(db):
+def test_allocation_only_passed_to_generator(db, create_report_sheet_target):
     """allocation_only query param is forwarded to the row generator."""
+    target = create_report_sheet_target()
     received_kwargs = {}
 
     def mock_generate_rows(db_session, **kwargs):
         received_kwargs.update(kwargs)
         return [["A", "Stocks", "100"]]
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
         return "tab"
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets?allocation_only=true")
+        response = client.post(
+            f"/api/reports/google-sheets?target_id={target.id}&allocation_only=true"
+        )
         assert response.status_code == 200
         assert received_kwargs.get("allocation_only") is True
     finally:
         _cleanup_overrides()
 
 
-def test_allocation_only_defaults_false(db):
+def test_allocation_only_defaults_false(db, create_report_sheet_target):
     """allocation_only defaults to False when not provided."""
+    target = create_report_sheet_target()
     received_kwargs = {}
 
     def mock_generate_rows(db_session, **kwargs):
         received_kwargs.update(kwargs)
         return [["A", "Stocks", "100"]]
 
-    def mock_write(r):
+    def mock_write(r, spreadsheet_id, template_tab):
         return "tab"
 
     client = _make_client(db, mock_generate_rows, mock_write)
     try:
-        response = client.post("/api/reports/google-sheets")
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
         assert response.status_code == 200
         assert received_kwargs.get("allocation_only") is False
+    finally:
+        _cleanup_overrides()
+
+
+def test_target_config_used_for_template_tab(db, create_report_sheet_target):
+    """Template tab from target config is passed to the writer."""
+    target = create_report_sheet_target(config={"template_tab": "CustomTemplate"})
+    received_args = {}
+
+    def mock_generate_rows(db_session, **kwargs):
+        return [["A", "Stocks", "100"]]
+
+    def mock_write(r, spreadsheet_id, template_tab):
+        received_args["spreadsheet_id"] = spreadsheet_id
+        received_args["template_tab"] = template_tab
+        return "tab"
+
+    client = _make_client(db, mock_generate_rows, mock_write)
+    try:
+        response = client.post(f"/api/reports/google-sheets?target_id={target.id}")
+        assert response.status_code == 200
+        assert received_args["spreadsheet_id"] == "sheet123"
+        assert received_args["template_tab"] == "CustomTemplate"
     finally:
         _cleanup_overrides()

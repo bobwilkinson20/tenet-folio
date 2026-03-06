@@ -4,20 +4,16 @@ import logging
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models.report_sheet_target import ReportSheetTarget
+from schemas.report import GoogleSheetsReportResponse
 from services.google_sheets_service import GoogleSheetsError, GoogleSheetsNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
-
-
-class GoogleSheetsReportResponse(BaseModel):
-    tab_name: str
-    rows_written: int
 
 
 def get_report_row_generator() -> Callable:
@@ -34,6 +30,7 @@ def get_sheets_writer() -> Callable:
 
 @router.post("/google-sheets", response_model=GoogleSheetsReportResponse)
 def generate_google_sheets_report(
+    target_id: str = Query(..., description="Sheet target ID"),
     allocation_only: bool = Query(False),
     db: Session = Depends(get_db),
     generate_rows: Callable = Depends(get_report_row_generator),
@@ -45,6 +42,7 @@ def generate_google_sheets_report(
     it with account/asset-class market value rows.
 
     Args:
+        target_id: ID of the ReportSheetTarget to write to.
         allocation_only: If True, include only allocation-flagged accounts.
 
     Returns:
@@ -53,10 +51,19 @@ def generate_google_sheets_report(
     Raises:
         HTTPException:
             - 400: No portfolio data available
+            - 404: Sheet target not found
             - 500: Unexpected error generating report data
             - 502: Google Sheets API error
             - 503: Google Sheets not configured
     """
+    # Look up the sheet target
+    target = db.query(ReportSheetTarget).filter(ReportSheetTarget.id == target_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Sheet target not found.")
+
+    spreadsheet_id = target.spreadsheet_id
+    template_tab = target.config_dict.get("template_tab", "Template")
+
     try:
         rows = generate_rows(db, allocation_only=allocation_only)
     except Exception:
@@ -70,11 +77,11 @@ def generate_google_sheets_report(
         )
 
     try:
-        tab_name = write_to_sheets(rows)
+        tab_name = write_to_sheets(rows, spreadsheet_id, template_tab)
     except GoogleSheetsNotConfiguredError:
         raise HTTPException(
             status_code=503,
-            detail="Google Sheets is not configured. Run setup_google_sheets.py first.",
+            detail="Google Sheets is not configured. Add credentials in Settings > Reports.",
         )
     except GoogleSheetsError:
         logger.error("Google Sheets API error", exc_info=True)

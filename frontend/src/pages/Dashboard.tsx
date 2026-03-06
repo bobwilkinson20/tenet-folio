@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useDashboard, usePreferences } from "../hooks";
-import { syncApi, reportsApi } from "../api";
+import { syncApi } from "../api";
 import type { SyncResponse } from "../api/sync";
-import type { GoogleSheetsReportResponse } from "../api/reports";
 import { SyncButton } from "../components/dashboard/SyncButton";
 import { SyncLogModal } from "../components/dashboard/SyncLogModal";
 import { ReportButton } from "../components/dashboard/ReportButton";
-import { ReportResultModal } from "../components/dashboard/ReportResultModal";
+import { ReportGenerationDialog } from "../components/dashboard/ReportGenerationDialog";
 import { AccountsTray } from "../components/dashboard/AccountsTray";
 import { AllocationTable } from "../components/dashboard/AllocationTable";
 import { AllocationChart } from "../components/dashboard/AllocationChart";
@@ -48,10 +47,7 @@ export function DashboardPage() {
   const [showSyncLog, setShowSyncLog] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [showReportResult, setShowReportResult] = useState(false);
-  const [reportResult, setReportResult] = useState<GoogleSheetsReportResponse | null>(null);
-  const [reportError, setReportError] = useState<string | null>(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -92,26 +88,6 @@ export function DashboardPage() {
     }
   };
 
-  const handleReport = async () => {
-    setGenerating(true);
-    setReportResult(null);
-    setReportError(null);
-    setShowReportResult(true);
-
-    try {
-      const response = await reportsApi.generateGoogleSheets({ allocation_only: allocationOnly });
-      setReportResult(response.data);
-    } catch (err) {
-      const axiosErr = err as {
-        response?: { data?: { detail?: string } };
-      };
-      const detail = axiosErr.response?.data?.detail;
-      setReportError(detail || (err instanceof Error ? err.message : "Report generation failed"));
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   if (prefsLoading || (loading && !dashboard)) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -137,7 +113,7 @@ export function DashboardPage() {
             <SidebarIcon className="w-5 h-5" />
           </button>
           <SyncButton onSync={handleSync} syncing={syncing} />
-          <ReportButton onReport={handleReport} generating={generating} />
+          <ReportButton onClick={() => setShowReportDialog(true)} />
         </div>
         <AllocationFilterToggle
           enabled={allocationOnly}
@@ -173,13 +149,11 @@ export function DashboardPage() {
             </p>
           </div>
 
-          {/* Report Result Modal */}
-          <ReportResultModal
-            isOpen={showReportResult}
-            onClose={() => setShowReportResult(false)}
-            generating={generating}
-            result={reportResult}
-            errorMessage={reportError}
+          {/* Report Generation Dialog */}
+          <ReportGenerationDialog
+            isOpen={showReportDialog}
+            onClose={() => setShowReportDialog(false)}
+            allocationOnly={allocationOnly}
           />
 
           {/* Sync Log Modal */}
