@@ -1,6 +1,6 @@
 """Tests for SecurityService."""
 
-from models import Security
+from models import AssetClass, Security
 from services.security_service import SecurityService
 
 
@@ -68,3 +68,52 @@ class TestEnsureExists:
             db, "AAPL", None, update_name=True
         )
         assert security.name == "Apple Inc."
+
+    def test_auto_classifies_cash_ticker(self, db):
+        """Cash tickers are auto-assigned to the Cash asset type."""
+        cash_type = AssetClass(name="Cash", color="#10B981")
+        db.add(cash_type)
+        db.flush()
+
+        security = SecurityService.ensure_exists(db, "_CASH:USD", "US Dollar")
+        assert security.manual_asset_class_id == cash_type.id
+
+    def test_auto_classifies_cash_ticker_any_currency(self, db):
+        """Cash tickers with any currency code are auto-classified."""
+        cash_type = AssetClass(name="Cash", color="#10B981")
+        db.add(cash_type)
+        db.flush()
+
+        security = SecurityService.ensure_exists(db, "_CASH:EUR", "Euro")
+        assert security.manual_asset_class_id == cash_type.id
+
+    def test_cash_ticker_skips_when_no_cash_asset_type(self, db):
+        """Cash tickers stay unclassified if Cash asset type doesn't exist."""
+        security = SecurityService.ensure_exists(db, "_CASH:USD", "US Dollar")
+        assert security.manual_asset_class_id is None
+
+    def test_non_cash_ticker_not_auto_classified(self, db):
+        """Regular tickers are not auto-classified."""
+        cash_type = AssetClass(name="Cash", color="#10B981")
+        db.add(cash_type)
+        db.flush()
+
+        security = SecurityService.ensure_exists(db, "AAPL", "Apple Inc.")
+        assert security.manual_asset_class_id is None
+
+    def test_existing_cash_security_not_reclassified(self, db):
+        """Existing cash securities are not modified on subsequent calls."""
+        cash_type = AssetClass(name="Cash", color="#10B981")
+        other_type = AssetClass(name="Other", color="#F97316")
+        db.add_all([cash_type, other_type])
+        db.flush()
+
+        existing = Security(
+            ticker="_CASH:USD", name="US Dollar",
+            manual_asset_class_id=other_type.id,
+        )
+        db.add(existing)
+        db.flush()
+
+        security = SecurityService.ensure_exists(db, "_CASH:USD")
+        assert security.manual_asset_class_id == other_type.id
