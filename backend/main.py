@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from models import UserPreference
 from services.asset_type_service import AssetTypeService
 from services.credential_manager import ACTIVE_PROFILE
 from services.portfolio_valuation_service import PortfolioValuationService
+from services.valuation_scheduler import _backfill_lock, backfill_loop
 
 DHV_VERIFIED_KEY = "system.dhv_verified_through"
 
@@ -30,17 +32,18 @@ async def lifespan(app: FastAPI):
     SessionLocal = get_session_local()
     db = SessionLocal()
     try:
-        service = PortfolioValuationService()
-        result = service.backfill(db)
-        if result.dates_calculated > 0:
-            logger.info(
-                "Valuation backfill: %d days, %d holdings written",
-                result.dates_calculated,
-                result.holdings_written,
-            )
-        if result.errors:
-            for error in result.errors:
-                logger.warning("Valuation backfill warning: %s", error)
+        with _backfill_lock:
+            service = PortfolioValuationService()
+            result = service.backfill(db)
+            if result.dates_calculated > 0:
+                logger.info(
+                    "Valuation backfill: %d days, %d holdings written",
+                    result.dates_calculated,
+                    result.holdings_written,
+                )
+            if result.errors:
+                for error in result.errors:
+                    logger.warning("Valuation backfill warning: %s", error)
     except Exception:
         logger.warning("Valuation backfill failed on startup", exc_info=True)
 
@@ -96,7 +99,25 @@ async def lifespan(app: FastAPI):
         logger.warning("Asset class seeding failed on startup", exc_info=True)
     finally:
         db.close()
+
+    # Start background valuation scheduler
+    startup_date = date.today()
+    shutdown_event = asyncio.Event()
+    scheduler_task = asyncio.create_task(
+        backfill_loop(shutdown_event, startup_date=startup_date)
+    )
+
     yield
+
+    # Graceful shutdown of the scheduler
+    shutdown_event.set()
+    try:
+        await asyncio.wait_for(scheduler_task, timeout=10)
+    except asyncio.TimeoutError:
+        logger.warning("Valuation scheduler did not stop in time — cancelling")
+        scheduler_task.cancel()
+    except Exception:
+        logger.warning("Error stopping valuation scheduler", exc_info=True)
 
 
 app = FastAPI(

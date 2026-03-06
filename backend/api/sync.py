@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from database import get_db
 from integrations.exceptions import ProviderAuthError, ProviderError
 from schemas import SyncSessionResponse
-from services.portfolio_valuation_service import PortfolioValuationService
 from services.sync_service import SyncService
 
 logger = logging.getLogger(__name__)
@@ -64,22 +63,6 @@ def trigger_sync(
         )
 
     try:
-        # Valuation backfill: fill any DHV gaps through yesterday before
-        # sync creates today's data. This is the only backfill step during
-        # sync — the startup backfill in main.py provides a safety net for
-        # any gaps that aren't filled here.
-        try:
-            valuation_service = PortfolioValuationService()
-            backfill_result = valuation_service.backfill(db)
-            if backfill_result.dates_calculated > 0:
-                logger.info(
-                    "Pre-sync valuation: %d days, %d holdings written",
-                    backfill_result.dates_calculated,
-                    backfill_result.holdings_written,
-                )
-        except Exception:
-            logger.warning("Pre-sync valuation backfill failed", exc_info=True)
-
         sync_session = sync_service.trigger_sync(db)
 
         return sync_session
