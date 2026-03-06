@@ -124,14 +124,14 @@ def copy_template_and_write(
     return tab_name
 
 
-def validate_spreadsheet_access(spreadsheet_id: str) -> str:
-    """Open a spreadsheet and return its title.
+def validate_spreadsheet_access(spreadsheet_id: str) -> tuple[str, gspread.Spreadsheet]:
+    """Open a spreadsheet and return its title and handle.
 
     Args:
         spreadsheet_id: Google Sheets spreadsheet ID.
 
     Returns:
-        The spreadsheet title.
+        Tuple of (title, spreadsheet) so callers can reuse the handle.
 
     Raises:
         GoogleSheetsError: If access fails.
@@ -139,31 +139,33 @@ def validate_spreadsheet_access(spreadsheet_id: str) -> str:
     try:
         gc = get_client()
         spreadsheet = gc.open_by_key(spreadsheet_id)
-        return spreadsheet.title
+        return spreadsheet.title, spreadsheet
     except GoogleSheetsError:
         raise
     except Exception as e:
         raise GoogleSheetsError(f"Failed to access spreadsheet: {e}") from e
 
 
-def validate_template_tab(spreadsheet_id: str, tab_name: str) -> bool:
+def validate_template_tab(
+    spreadsheet_id: str,
+    tab_name: str,
+    spreadsheet: gspread.Spreadsheet | None = None,
+) -> None:
     """Check whether a tab exists in the given spreadsheet.
 
     Args:
-        spreadsheet_id: Google Sheets spreadsheet ID.
+        spreadsheet_id: Google Sheets spreadsheet ID (used if *spreadsheet* is None).
         tab_name: Tab name to check.
-
-    Returns:
-        True if the tab exists.
+        spreadsheet: Optional already-opened spreadsheet to avoid a second API call.
 
     Raises:
         GoogleSheetsError: If the spreadsheet cannot be accessed or tab not found.
     """
     try:
-        gc = get_client()
-        spreadsheet = gc.open_by_key(spreadsheet_id)
+        if spreadsheet is None:
+            gc = get_client()
+            spreadsheet = gc.open_by_key(spreadsheet_id)
         spreadsheet.worksheet(tab_name)
-        return True
     except gspread.exceptions.WorksheetNotFound:
         raise GoogleSheetsError(
             f"Template tab '{tab_name}' not found in spreadsheet."

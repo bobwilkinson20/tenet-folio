@@ -199,21 +199,6 @@ class TestReportTypes:
 # ---------------------------------------------------------------------------
 
 
-def _create_target(db, report_type="account_allocation", spreadsheet_id="sheet123",
-                   display_name="Test Sheet", config=None):
-    """Helper to create a ReportSheetTarget directly in the DB."""
-    target = ReportSheetTarget(
-        report_type=report_type,
-        spreadsheet_id=spreadsheet_id,
-        display_name=display_name,
-    )
-    target.config_dict = config or {"template_tab": "Template"}
-    db.add(target)
-    db.commit()
-    db.refresh(target)
-    return target
-
-
 class TestListTargets:
     """Tests for GET /api/reports/config/targets."""
 
@@ -227,10 +212,10 @@ class TestListTargets:
         finally:
             _cleanup_overrides()
 
-    def test_list_all(self, db):
+    def test_list_all(self, db, create_report_sheet_target):
         """Returns all targets."""
-        _create_target(db, display_name="Sheet A")
-        _create_target(db, display_name="Sheet B")
+        create_report_sheet_target(display_name="Sheet A")
+        create_report_sheet_target(display_name="Sheet B")
         client = _make_client(db)
         try:
             response = client.get("/api/reports/config/targets")
@@ -240,10 +225,10 @@ class TestListTargets:
         finally:
             _cleanup_overrides()
 
-    def test_filter_by_report_type(self, db):
+    def test_filter_by_report_type(self, db, create_report_sheet_target):
         """Filters targets by report_type query param."""
-        _create_target(db, report_type="account_allocation")
-        _create_target(db, report_type="other_type")
+        create_report_sheet_target(report_type="account_allocation")
+        create_report_sheet_target(report_type="other_type")
         client = _make_client(db)
         try:
             response = client.get("/api/reports/config/targets?report_type=account_allocation")
@@ -325,9 +310,9 @@ class TestCreateTarget:
                 patch("api.reports_config.settings") as mock_settings,
                 patch(
                     "api.reports_config.validate_spreadsheet_access",
-                    return_value="My Portfolio Sheet",
+                    return_value=("My Portfolio Sheet", MagicMock()),
                 ),
-                patch("api.reports_config.validate_template_tab", return_value=True),
+                patch("api.reports_config.validate_template_tab"),
             ):
                 mock_settings.GOOGLE_SHEETS_CREDENTIALS = '{"key": "value"}'
                 response = client.post(
@@ -354,9 +339,9 @@ class TestCreateTarget:
                 patch("api.reports_config.settings") as mock_settings,
                 patch(
                     "api.reports_config.validate_spreadsheet_access",
-                    return_value="My Portfolio Sheet",
+                    return_value=("My Portfolio Sheet", MagicMock()),
                 ),
-                patch("api.reports_config.validate_template_tab", return_value=True),
+                patch("api.reports_config.validate_template_tab"),
             ):
                 mock_settings.GOOGLE_SHEETS_CREDENTIALS = '{"key": "value"}'
                 response = client.post(
@@ -391,9 +376,9 @@ class TestUpdateTarget:
         finally:
             _cleanup_overrides()
 
-    def test_update_display_name(self, db):
+    def test_update_display_name(self, db, create_report_sheet_target):
         """Updates display name."""
-        target = _create_target(db)
+        target = create_report_sheet_target()
         client = _make_client(db)
         try:
             response = client.put(
@@ -405,18 +390,32 @@ class TestUpdateTarget:
         finally:
             _cleanup_overrides()
 
-    def test_update_config(self, db):
+    def test_update_config(self, db, create_report_sheet_target):
         """Updates config with re-validation."""
-        target = _create_target(db)
+        target = create_report_sheet_target()
         client = _make_client(db)
         try:
-            with patch("api.reports_config.validate_template_tab", return_value=True):
+            with patch("api.reports_config.validate_template_tab"):
                 response = client.put(
                     f"/api/reports/config/targets/{target.id}",
                     json={"config": {"template_tab": "NewTemplate"}},
                 )
                 assert response.status_code == 200, response.json()
                 assert response.json()["config"]["template_tab"] == "NewTemplate"
+        finally:
+            _cleanup_overrides()
+
+    def test_update_config_missing_required_field(self, db, create_report_sheet_target):
+        """Returns 400 when required config field is missing."""
+        target = create_report_sheet_target()
+        client = _make_client(db)
+        try:
+            response = client.put(
+                f"/api/reports/config/targets/{target.id}",
+                json={"config": {}},
+            )
+            assert response.status_code == 400
+            assert "template_tab" in response.json()["detail"].lower()
         finally:
             _cleanup_overrides()
 
@@ -433,9 +432,9 @@ class TestDeleteTarget:
         finally:
             _cleanup_overrides()
 
-    def test_success(self, db):
+    def test_success(self, db, create_report_sheet_target):
         """Deletes target and returns 204."""
-        target = _create_target(db)
+        target = create_report_sheet_target()
         client = _make_client(db)
         try:
             response = client.delete(f"/api/reports/config/targets/{target.id}")

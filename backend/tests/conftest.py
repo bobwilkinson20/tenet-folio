@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
 from main import app
+from models.report_sheet_target import ReportSheetTarget
 from api.providers import get_registry as get_registry_for_providers
 from api.sync import get_sync_service as get_sync_service_for_sync
 from services.sync_service import SyncService
@@ -31,6 +32,26 @@ from tests.fixtures.mocks import (
     SAMPLE_SNAPTRADE_ACCOUNTS,
     SAMPLE_SNAPTRADE_HOLDINGS,
 )
+
+@pytest.fixture(name="create_report_sheet_target")
+def create_report_sheet_target_fixture(db):
+    """Factory fixture to create ReportSheetTarget records."""
+
+    def _create(report_type="account_allocation", spreadsheet_id="sheet123",
+                display_name="Test Sheet", config=None):
+        target = ReportSheetTarget(
+            report_type=report_type,
+            spreadsheet_id=spreadsheet_id,
+            display_name=display_name,
+        )
+        target.config_dict = config or {"template_tab": "Template"}
+        db.add(target)
+        db.commit()
+        db.refresh(target)
+        return target
+
+    return _create
+
 
 @pytest.fixture(name="db")
 def db_fixture():

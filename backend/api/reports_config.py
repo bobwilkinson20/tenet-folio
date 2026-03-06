@@ -177,9 +177,9 @@ def create_target(
             detail="Google Sheets credentials are not configured. Add them first.",
         )
 
-    # Validate spreadsheet access
+    # Validate spreadsheet access (returns handle for reuse)
     try:
-        sheet_title = validate_spreadsheet_access(body.spreadsheet_id)
+        sheet_title, spreadsheet = validate_spreadsheet_access(body.spreadsheet_id)
     except GoogleSheetsError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -199,10 +199,10 @@ def create_target(
                 detail=f"Missing required config field: '{cf['key']}'.",
             )
 
-    # Validate template tab if present
+    # Validate template tab if present (reuses spreadsheet handle)
     if "template_tab" in config:
         try:
-            validate_template_tab(body.spreadsheet_id, config["template_tab"])
+            validate_template_tab(body.spreadsheet_id, config["template_tab"], spreadsheet)
         except GoogleSheetsError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

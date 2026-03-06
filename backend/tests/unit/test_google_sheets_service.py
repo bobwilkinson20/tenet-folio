@@ -10,6 +10,8 @@ from services.google_sheets_service import (
     GoogleSheetsNotConfiguredError,
     copy_template_and_write,
     get_client,
+    validate_spreadsheet_access,
+    validate_template_tab,
 )
 
 
@@ -147,3 +149,75 @@ class TestCopyTemplateAndWrite:
 
             with pytest.raises(GoogleSheetsError, match="Failed to write"):
                 copy_template_and_write([["A", "B", "100"]], "sheet123", "Template")
+
+
+class TestValidateSpreadsheetAccess:
+    """Tests for validate_spreadsheet_access()."""
+
+    def test_success(self):
+        """Returns title and spreadsheet handle on success."""
+        with patch("services.google_sheets_service.get_client") as mock_get_client:
+            mock_gc = MagicMock()
+            mock_get_client.return_value = mock_gc
+            mock_spreadsheet = MagicMock()
+            mock_spreadsheet.title = "My Sheet"
+            mock_gc.open_by_key.return_value = mock_spreadsheet
+
+            title, spreadsheet = validate_spreadsheet_access("sheet123")
+            assert title == "My Sheet"
+            assert spreadsheet is mock_spreadsheet
+            mock_gc.open_by_key.assert_called_once_with("sheet123")
+
+    def test_access_failure(self):
+        """Raises GoogleSheetsError when spreadsheet cannot be opened."""
+        with patch("services.google_sheets_service.get_client") as mock_get_client:
+            mock_gc = MagicMock()
+            mock_get_client.return_value = mock_gc
+            mock_gc.open_by_key.side_effect = Exception("Not found")
+
+            with pytest.raises(GoogleSheetsError, match="Failed to access spreadsheet"):
+                validate_spreadsheet_access("bad_id")
+
+    def test_not_configured(self):
+        """Raises GoogleSheetsNotConfiguredError when credentials missing."""
+        with patch(
+            "services.google_sheets_service.get_client",
+            side_effect=GoogleSheetsNotConfiguredError("Not configured"),
+        ):
+            with pytest.raises(GoogleSheetsNotConfiguredError):
+                validate_spreadsheet_access("sheet123")
+
+
+class TestValidateTemplateTab:
+    """Tests for validate_template_tab()."""
+
+    def test_success_with_spreadsheet_handle(self):
+        """Validates tab using provided spreadsheet handle."""
+        mock_spreadsheet = MagicMock()
+        mock_spreadsheet.worksheet.return_value = MagicMock()
+
+        # Should not raise
+        validate_template_tab("sheet123", "Template", spreadsheet=mock_spreadsheet)
+        mock_spreadsheet.worksheet.assert_called_once_with("Template")
+
+    def test_success_without_handle(self):
+        """Opens spreadsheet and validates tab when no handle provided."""
+        with patch("services.google_sheets_service.get_client") as mock_get_client:
+            mock_gc = MagicMock()
+            mock_get_client.return_value = mock_gc
+            mock_spreadsheet = MagicMock()
+            mock_gc.open_by_key.return_value = mock_spreadsheet
+
+            validate_template_tab("sheet123", "Template")
+            mock_gc.open_by_key.assert_called_once_with("sheet123")
+            mock_spreadsheet.worksheet.assert_called_once_with("Template")
+
+    def test_tab_not_found(self):
+        """Raises GoogleSheetsError when tab does not exist."""
+        import gspread.exceptions
+
+        mock_spreadsheet = MagicMock()
+        mock_spreadsheet.worksheet.side_effect = gspread.exceptions.WorksheetNotFound("Missing")
+
+        with pytest.raises(GoogleSheetsError, match="Template.*not found"):
+            validate_template_tab("sheet123", "Template", spreadsheet=mock_spreadsheet)

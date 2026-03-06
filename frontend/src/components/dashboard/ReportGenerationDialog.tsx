@@ -2,7 +2,7 @@
  * Dialog for generating reports — handles target selection and result display.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { reportsApi } from "@/api/reports";
 import type { GoogleSheetsReportResponse } from "@/api/reports";
 import { Modal } from "@/components/common/Modal";
@@ -72,8 +72,9 @@ export function ReportGenerationDialog({
       });
   }, [isOpen]);
 
-  const filteredTargets = targets.filter(
-    (t) => t.report_type === selectedTypeId,
+  const filteredTargets = useMemo(
+    () => targets.filter((t) => t.report_type === selectedTypeId),
+    [targets, selectedTypeId],
   );
 
   // Auto-select target when type changes
@@ -234,6 +235,7 @@ export function ReportGenerationDialog({
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleGenerate}
               disabled={!selectedTargetId || generating}
               className="rounded bg-tf-accent-primary px-4 py-2 text-sm font-medium text-white hover:bg-tf-accent-primary/90 disabled:opacity-50"

@@ -5,23 +5,7 @@ from fastapi.testclient import TestClient
 from api.reports import get_report_row_generator, get_sheets_writer
 from database import get_db
 from main import app
-from models.report_sheet_target import ReportSheetTarget
 from services.google_sheets_service import GoogleSheetsError, GoogleSheetsNotConfiguredError
-
-
-def _create_target(db, report_type="account_allocation", spreadsheet_id="sheet123",
-                   display_name="Test Sheet", config=None):
-    """Helper to create a ReportSheetTarget directly in the DB."""
-    target = ReportSheetTarget(
-        report_type=report_type,
-        spreadsheet_id=spreadsheet_id,
-        display_name=display_name,
-    )
-    target.config_dict = config or {"template_tab": "Template"}
-    db.add(target)
-    db.commit()
-    db.refresh(target)
-    return target
 
 
 def _make_client(db, generate_rows=None, write_to_sheets=None):
@@ -51,9 +35,9 @@ def _cleanup_overrides():
     app.dependency_overrides.pop(get_sheets_writer, None)
 
 
-def test_200_success(db):
+def test_200_success(db, create_report_sheet_target):
     """Successful report returns 200 with tab name and row count."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
     rows = [
         ["Account A", "Stocks", "1000.00"],
         ["/", "Bonds", "500.00"],
@@ -112,9 +96,9 @@ def test_422_missing_target_id(db):
         _cleanup_overrides()
 
 
-def test_400_no_data(db):
+def test_400_no_data(db, create_report_sheet_target):
     """Returns 400 when no portfolio data is available."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         return []
@@ -131,9 +115,9 @@ def test_400_no_data(db):
         _cleanup_overrides()
 
 
-def test_502_sheets_api_error(db):
+def test_502_sheets_api_error(db, create_report_sheet_target):
     """Returns 502 when Google Sheets API fails."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
@@ -150,9 +134,9 @@ def test_502_sheets_api_error(db):
         _cleanup_overrides()
 
 
-def test_503_not_configured(db):
+def test_503_not_configured(db, create_report_sheet_target):
     """Returns 503 when Google Sheets is not configured."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         return [["A", "B", "100"]]
@@ -169,9 +153,9 @@ def test_503_not_configured(db):
         _cleanup_overrides()
 
 
-def test_500_generate_failure(db):
+def test_500_generate_failure(db, create_report_sheet_target):
     """Returns 500 when row generation fails unexpectedly."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
 
     def mock_generate_rows(db_session, **kwargs):
         raise RuntimeError("Unexpected DB error")
@@ -188,9 +172,9 @@ def test_500_generate_failure(db):
         _cleanup_overrides()
 
 
-def test_allocation_only_passed_to_generator(db):
+def test_allocation_only_passed_to_generator(db, create_report_sheet_target):
     """allocation_only query param is forwarded to the row generator."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
     received_kwargs = {}
 
     def mock_generate_rows(db_session, **kwargs):
@@ -211,9 +195,9 @@ def test_allocation_only_passed_to_generator(db):
         _cleanup_overrides()
 
 
-def test_allocation_only_defaults_false(db):
+def test_allocation_only_defaults_false(db, create_report_sheet_target):
     """allocation_only defaults to False when not provided."""
-    target = _create_target(db)
+    target = create_report_sheet_target()
     received_kwargs = {}
 
     def mock_generate_rows(db_session, **kwargs):
@@ -232,9 +216,9 @@ def test_allocation_only_defaults_false(db):
         _cleanup_overrides()
 
 
-def test_target_config_used_for_template_tab(db):
+def test_target_config_used_for_template_tab(db, create_report_sheet_target):
     """Template tab from target config is passed to the writer."""
-    target = _create_target(db, config={"template_tab": "CustomTemplate"})
+    target = create_report_sheet_target(config={"template_tab": "CustomTemplate"})
     received_args = {}
 
     def mock_generate_rows(db_session, **kwargs):
