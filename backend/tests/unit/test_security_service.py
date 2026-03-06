@@ -78,9 +78,9 @@ class TestEnsureExists:
         security = SecurityService.ensure_exists(db, "_CASH:USD", "US Dollar")
         assert security.manual_asset_class_id == cash_type.id
 
-    def test_auto_classifies_cash_ticker_any_currency(self, db):
-        """Cash tickers with any currency code are auto-classified."""
-        cash_type = AssetClass(name="Cash", color="#10B981")
+    def test_auto_classifies_cash_ticker_case_insensitive(self, db):
+        """Cash type lookup is case-insensitive (e.g., 'CASH' or 'cash')."""
+        cash_type = AssetClass(name="CASH", color="#10B981")
         db.add(cash_type)
         db.flush()
 
