@@ -24,6 +24,16 @@ _backfill_lock = threading.Lock()
 BACKFILL_INTERVAL = 3600  # 1 hour
 
 
+def run_startup_backfill(service: "PortfolioValuationService", db):
+    """Run backfill under the scheduler lock during startup.
+
+    Ensures the startup backfill and the background scheduler never
+    run concurrently. Returns the BackfillResult from service.backfill().
+    """
+    with _backfill_lock:
+        return service.backfill(db)
+
+
 def run_backfill_if_needed(last_run_date: date | None) -> date | None:
     """Run valuation backfill if it hasn't already been done today.
 

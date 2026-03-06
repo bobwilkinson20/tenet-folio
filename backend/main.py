@@ -17,7 +17,7 @@ from models import UserPreference
 from services.asset_type_service import AssetTypeService
 from services.credential_manager import ACTIVE_PROFILE
 from services.portfolio_valuation_service import PortfolioValuationService
-from services.valuation_scheduler import _backfill_lock, backfill_loop
+from services.valuation_scheduler import backfill_loop, run_startup_backfill
 
 DHV_VERIFIED_KEY = "system.dhv_verified_through"
 
@@ -33,19 +33,18 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     startup_backfill_ok = False
     try:
-        with _backfill_lock:
-            service = PortfolioValuationService()
-            result = service.backfill(db)
-            if result.dates_calculated > 0:
-                logger.info(
-                    "Valuation backfill: %d days, %d holdings written",
-                    result.dates_calculated,
-                    result.holdings_written,
-                )
-            if result.errors:
-                for error in result.errors:
-                    logger.warning("Valuation backfill warning: %s", error)
-            startup_backfill_ok = True
+        service = PortfolioValuationService()
+        result = run_startup_backfill(service, db)
+        if result.dates_calculated > 0:
+            logger.info(
+                "Valuation backfill: %d days, %d holdings written",
+                result.dates_calculated,
+                result.holdings_written,
+            )
+        if result.errors:
+            for error in result.errors:
+                logger.warning("Valuation backfill warning: %s", error)
+        startup_backfill_ok = True
     except Exception:
         logger.warning("Valuation backfill failed on startup", exc_info=True)
 
