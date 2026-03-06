@@ -174,10 +174,12 @@ Keys should be namespaced by page/feature (e.g., `accounts.hideInactive`). The h
 | Plaid setup script | `backend/scripts/setup_plaid.py` |
 | Schwab token refresh | `backend/scripts/refresh_schwab_token.py` |
 | Schwab debug script | `backend/scripts/debug_schwab.py` |
-| Google Sheets setup | `backend/scripts/setup_google_sheets.py` |
 | Google Sheets service | `backend/services/google_sheets_service.py` |
+| Report types registry | `backend/services/report_types.py` |
 | Report service | `backend/services/report_service.py` |
 | Reports API | `backend/api/reports.py` |
+| Reports config API | `backend/api/reports_config.py` |
+| Report sheet target model | `backend/models/report_sheet_target.py` |
 | Config API (profile) | `backend/api/config.py` |
 | Credential manager | `backend/services/credential_manager.py` |
 | Keychain migration | `backend/scripts/migrate_env_to_keychain.py` |
@@ -325,20 +327,13 @@ uv run python scripts/setup_plaid.py
 
 ### Google Sheets Setup
 
-To configure Google Sheets report export:
+Google Sheets report export is configured in-app via **Settings > Reports**:
 
-```bash
-cd backend
-uv run python scripts/setup_google_sheets.py
-# Follow prompts to validate service account credentials and spreadsheet access
-# Add GOOGLE_SHEETS_CREDENTIALS_FILE, GOOGLE_SHEETS_SPREADSHEET_ID to your .env file
-```
-
-**Prerequisites:**
-1. Create a service account in Google Cloud Console
-2. Enable the Google Sheets API for the project
-3. Download the service account JSON key file
-4. Share the target spreadsheet with the service account email
+1. Create a service account in Google Cloud Console and enable the Google Sheets API
+2. Download the service account JSON key file
+3. Share the target spreadsheet with the service account email
+4. In the app, go to Settings > Reports and paste the JSON key content
+5. Add a Sheet Target for each spreadsheet you want to export to
 
 ## Data Backfill Scripts
 

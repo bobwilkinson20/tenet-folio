@@ -13,7 +13,8 @@ from .security import Security
 from .sync_session import SyncSession
 from .sync_log import SyncLogEntry
 from .provider_setting import ProviderSetting
+from .report_sheet_target import ReportSheetTarget
 from .user_preference import UserPreference
 from .utils import generate_uuid
 
-__all__ = ["Account", "AccountSnapshot", "Activity", "AssetClass", "DailyHoldingValue", "Holding", "HoldingLot", "LotDisposal", "PlaidItem", "ProviderSetting", "Security", "SyncSession", "SyncLogEntry", "UserPreference", "generate_uuid"]
+__all__ = ["Account", "AccountSnapshot", "Activity", "AssetClass", "DailyHoldingValue", "Holding", "HoldingLot", "LotDisposal", "PlaidItem", "ProviderSetting", "ReportSheetTarget", "Security", "SyncSession", "SyncLogEntry", "UserPreference", "generate_uuid"]

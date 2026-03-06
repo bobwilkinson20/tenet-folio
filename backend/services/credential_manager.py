@@ -57,6 +57,7 @@ CREDENTIAL_KEYS: frozenset[str] = frozenset(
         "PLAID_CLIENT_ID",
         "PLAID_SECRET",
         "PLAID_ENVIRONMENT",
+        "GOOGLE_SHEETS_CREDENTIALS",
         "SQLCIPHER_KEY",
     }
 )

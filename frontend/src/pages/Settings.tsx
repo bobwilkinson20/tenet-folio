@@ -1,15 +1,16 @@
 /**
- * Settings page with tabs for Asset Types, Securities, and Portfolio allocation
+ * Settings page with tabs for Providers, Asset Types, Portfolio, Securities, and Reports
  */
 
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AssetTypeList } from "@/components/settings/AssetTypeList";
 import { ProviderList } from "@/components/settings/ProviderList";
+import { ReportsSettings } from "@/components/settings/ReportsSettings";
 import { SecurityList } from "@/components/settings/SecurityList";
 import { TargetAllocationForm } from "@/components/settings/TargetAllocationForm";
 
-type TabValue = "providers" | "types" | "securities" | "portfolio";
+type TabValue = "providers" | "types" | "securities" | "portfolio" | "reports";
 
 export function Settings() {
   const [searchParams] = useSearchParams();
@@ -17,7 +18,7 @@ export function Settings() {
   // Initialize tab from query params
   const initialTab = (() => {
     const tab = searchParams.get("tab");
-    if (tab === "providers" || tab === "securities" || tab === "portfolio" || tab === "types") {
+    if (tab === "providers" || tab === "securities" || tab === "portfolio" || tab === "types" || tab === "reports") {
       return tab;
     }
     return "providers" as TabValue;
@@ -72,6 +73,16 @@ export function Settings() {
           >
             Securities
           </button>
+          <button
+            onClick={() => setActiveTab("reports")}
+            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "reports"
+                ? "border-tf-accent-primary text-tf-accent-primary"
+                : "border-transparent text-tf-text-tertiary hover:text-tf-text-primary hover:border-tf-border-strong"
+            }`}
+          >
+            Reports
+          </button>
         </nav>
       </div>
 
@@ -81,6 +92,7 @@ export function Settings() {
         {activeTab === "types" && <AssetTypeList />}
         {activeTab === "portfolio" && <TargetAllocationForm />}
         {activeTab === "securities" && <SecurityList />}
+        {activeTab === "reports" && <ReportsSettings />}
       </div>
     </div>
   );

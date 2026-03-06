@@ -1,5 +1,6 @@
 """Tests for google_sheets_service."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,66 +16,64 @@ from services.google_sheets_service import (
 class TestGetClient:
     """Tests for get_client()."""
 
-    def test_missing_credentials_file(self):
-        """Raises GoogleSheetsNotConfiguredError when credentials file is not configured."""
+    def test_missing_credentials(self):
+        """Raises GoogleSheetsNotConfiguredError when credentials are not configured."""
         with patch("services.google_sheets_service.settings") as mock_settings:
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = ""
+            mock_settings.GOOGLE_SHEETS_CREDENTIALS = ""
             with pytest.raises(GoogleSheetsNotConfiguredError, match="not configured"):
+                get_client()
+
+    def test_invalid_json(self):
+        """Raises GoogleSheetsError when credentials JSON is invalid."""
+        with patch("services.google_sheets_service.settings") as mock_settings:
+            mock_settings.GOOGLE_SHEETS_CREDENTIALS = "not json"
+            with pytest.raises(GoogleSheetsError, match="Invalid.*JSON"):
                 get_client()
 
     def test_auth_failure(self):
         """Raises GoogleSheetsError when authentication fails."""
+        creds = json.dumps({"client_email": "a@b.com", "private_key": "pk"})
         with (
             patch("services.google_sheets_service.settings") as mock_settings,
             patch("services.google_sheets_service.gspread") as mock_gspread,
         ):
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
-            mock_gspread.service_account.side_effect = Exception("Invalid credentials")
+            mock_settings.GOOGLE_SHEETS_CREDENTIALS = creds
+            mock_gspread.service_account_from_dict.side_effect = Exception("Invalid credentials")
 
             with pytest.raises(GoogleSheetsError, match="Failed to authenticate"):
                 get_client()
 
     def test_success(self):
         """Returns authenticated client on success."""
+        creds = json.dumps({"client_email": "a@b.com", "private_key": "pk"})
         with (
             patch("services.google_sheets_service.settings") as mock_settings,
             patch("services.google_sheets_service.gspread") as mock_gspread,
         ):
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
+            mock_settings.GOOGLE_SHEETS_CREDENTIALS = creds
             mock_client = MagicMock()
-            mock_gspread.service_account.return_value = mock_client
+            mock_gspread.service_account_from_dict.return_value = mock_client
 
             result = get_client()
             assert result is mock_client
-            mock_gspread.service_account.assert_called_once_with(
-                filename="/path/to/creds.json"
-            )
+            mock_gspread.service_account_from_dict.assert_called_once()
 
 
 class TestCopyTemplateAndWrite:
     """Tests for copy_template_and_write()."""
 
     def test_missing_spreadsheet_id(self):
-        """Raises GoogleSheetsNotConfiguredError when spreadsheet ID is not configured."""
-        with patch("services.google_sheets_service.settings") as mock_settings:
-            mock_settings.GOOGLE_SHEETS_SPREADSHEET_ID = ""
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
-
-            with pytest.raises(GoogleSheetsNotConfiguredError, match="not configured"):
-                copy_template_and_write([["A", "B", "100"]])
+        """Raises GoogleSheetsNotConfiguredError when spreadsheet ID is empty."""
+        with pytest.raises(GoogleSheetsNotConfiguredError, match="No spreadsheet ID"):
+            copy_template_and_write([["A", "B", "100"]], "", "Template")
 
     def test_template_not_found(self):
         """Raises GoogleSheetsError when template tab doesn't exist."""
         import gspread.exceptions
 
         with (
-            patch("services.google_sheets_service.settings") as mock_settings,
             patch("services.google_sheets_service.get_client") as mock_get_client,
         ):
-            mock_settings.GOOGLE_SHEETS_SPREADSHEET_ID = "sheet123"
-            mock_settings.GOOGLE_SHEETS_TEMPLATE_TAB = "Template"
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
-
             mock_gc = MagicMock()
             mock_get_client.return_value = mock_gc
             mock_spreadsheet = MagicMock()
@@ -82,18 +81,13 @@ class TestCopyTemplateAndWrite:
             mock_spreadsheet.worksheet.side_effect = gspread.exceptions.WorksheetNotFound("Template")
 
             with pytest.raises(GoogleSheetsError, match="Template.*not found"):
-                copy_template_and_write([["A", "B", "100"]])
+                copy_template_and_write([["A", "B", "100"]], "sheet123", "Template")
 
     def test_successful_write(self):
         """Successfully duplicates template and writes rows."""
         with (
-            patch("services.google_sheets_service.settings") as mock_settings,
             patch("services.google_sheets_service.get_client") as mock_get_client,
         ):
-            mock_settings.GOOGLE_SHEETS_SPREADSHEET_ID = "sheet123"
-            mock_settings.GOOGLE_SHEETS_TEMPLATE_TAB = "Template"
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
-
             mock_gc = MagicMock()
             mock_get_client.return_value = mock_gc
             mock_spreadsheet = MagicMock()
@@ -111,7 +105,7 @@ class TestCopyTemplateAndWrite:
                 ["/", "Bonds", "500.00"],
             ]
 
-            tab_name = copy_template_and_write(rows)
+            tab_name = copy_template_and_write(rows, "sheet123", "Template")
 
             # Tab name should be a UTC timestamp
             assert "UTC" in tab_name
@@ -131,18 +125,13 @@ class TestCopyTemplateAndWrite:
     def test_empty_rows(self):
         """Raises GoogleSheetsError when rows list is empty."""
         with pytest.raises(GoogleSheetsError, match="No data rows provided"):
-            copy_template_and_write([])
+            copy_template_and_write([], "sheet123", "Template")
 
     def test_write_failure(self):
         """Raises GoogleSheetsError when writing fails."""
         with (
-            patch("services.google_sheets_service.settings") as mock_settings,
             patch("services.google_sheets_service.get_client") as mock_get_client,
         ):
-            mock_settings.GOOGLE_SHEETS_SPREADSHEET_ID = "sheet123"
-            mock_settings.GOOGLE_SHEETS_TEMPLATE_TAB = "Template"
-            mock_settings.GOOGLE_SHEETS_CREDENTIALS_FILE = "/path/to/creds.json"
-
             mock_gc = MagicMock()
             mock_get_client.return_value = mock_gc
             mock_spreadsheet = MagicMock()
@@ -157,4 +146,4 @@ class TestCopyTemplateAndWrite:
             mock_new_ws.update.side_effect = Exception("API quota exceeded")
 
             with pytest.raises(GoogleSheetsError, match="Failed to write"):
-                copy_template_and_write([["A", "B", "100"]])
+                copy_template_and_write([["A", "B", "100"]], "sheet123", "Template")

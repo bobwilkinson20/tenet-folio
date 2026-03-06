@@ -9,3 +9,4 @@ export * from "./security";
 export * from "./sync_session";
 export * from "./preference";
 export * from "./provider";
+export * from "./report";
