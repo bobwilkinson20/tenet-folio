@@ -59,4 +59,4 @@ cdp_api_key*.json
 # TLS certificates (mkcert)
 .certs/
 
-.claude/skills
+.claude/
